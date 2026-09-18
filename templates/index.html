@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mistrův asistent</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f8fafc;
+      color: #1f1f1f;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* LEVÝ BOČNÍ PANEL */
+    aside {
+      width: 280px;
+      background: #1c2430;
+      color: #ffffff;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      border-right: 1px solid #e0e0e0;
+      z-index: 10;
+    }
+    aside h2 {
+      font-size: 1.2rem;
+      margin-top: 0;
+      margin-bottom: 16px;
+      color: #ffffff;
+    }
+
+    .nav-btn {
+      background: #357abd;
+      color: white;
+      border: 0;
+      padding: 12px 18px;
+      border-radius: 24px;
+      cursor: pointer;
+      font-weight: 600;
+      margin-bottom: 24px;
+      text-align: left;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+    .nav-btn:hover { background: #4a90e2; }
+
+    .history-title {
+      font-size: 0.75rem;
+      color: #a0aec0;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: bold;
+    }
+    #chat-history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow-y: auto;
+      flex: 1;
+      margin-bottom: 15px;
+    }
+    
+    /* HISTORIE - POLOŽKA S AKCEMI */
+    .history-item {
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      color: #e2e8f0;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: background 0.2s;
+    }
+    .history-item:hover, .history-item.active {
+      background: rgba(255, 255, 255, 0.15);
+    }
+    .history-item-title {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }
+    .history-rename-input {
+      background: #0f172a;
+      border: 1px solid #4a90e2;
+      color: #ffffff;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      width: 100%;
+      outline: none;
+    }
+    .history-actions {
+      display: none;
+      gap: 4px;
+    }
+    .history-item:hover .history-actions {
+      display: flex;
+    }
+    .icon-btn {
+      background: transparent;
+      border: none;
+      color: #a0aec0;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+    .icon-btn:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    aside .sidebar-btn {
+      margin-top: auto;
+      background: #e53e3e;
+      color: white;
+      border: 0;
+      padding: 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.2s;
+    }
+    aside .sidebar-btn:hover { background: #c53030; }
+
+    /* HLAVNÍ OBLAST */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: radial-gradient(circle at center, #ffffff 0%, #edf2f7 100%);
+      position: relative;
+    }
+
+    main.empty-state {
+      justify-content: center;
+      align-items: center;
+    }
+
+    .welcome-title {
+      display: none;
+      font-size: 2.8rem;
+      font-weight: 500;
+      color: #4a90e2;
+      margin-bottom: 30px;
+      text-align: center;
+      background: linear-gradient(135deg, #4a90e2 0%, #d946ef 100%);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    main.empty-state .welcome-title {
+      display: block;
+    }
+
+    header {
+      padding: 16px 24px;
+      background: #4a90e2;
+      color: #ffffff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    main.empty-state header {
+      display: none;
+    }
+    h1 { margin: 0; font-size: 1.2rem; }
+
+    #log {
+      flex: 1;
+      padding: 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    main.empty-state #log {
+      display: none;
+    }
+
+    /* OBAL PRO ZPRÁVU A TLAČÍTKA POD NÍ */
+    .msg-group {
+      display: flex;
+      flex-direction: column;
+      max-width: 70%;
+    }
+    .msg-group.q-group {
+      align-self: flex-end;
+      align-items: flex-end;
+    }
+    .msg-group.a-group {
+      align-self: flex-start;
+      align-items: flex-start;
+    }
+
+    /* BUBLINY */
+    .q, .a {
+      padding: 12px 18px;
+      line-height: 1.5;
+      font-size: 1rem;
+      border-radius: 16px;
+      width: fit-content;
+    }
+    .q {
+      background: #4a90e2;
+      color: #ffffff;
+      border-bottom-right-radius: 4px;
+      box-shadow: 0 2px 6px rgba(74, 144, 226, 0.25);
+      white-space: pre-wrap;
+    }
+    .a {
+      background: #ffffff;
+      color: #1c2430;
+      border: 1px solid #e2e8f0;
+      border-bottom-left-radius: 4px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+    }
+
+    /* TLAČÍTKA POD BUBLINOU */
+    .action-bar {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.15s ease-in-out, visibility 0.15s ease-in-out;
+      padding: 0 2px;
+    }
+    .msg-group:hover .action-bar {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .action-btn {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      color: #475569;
+      cursor: pointer;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .action-btn:hover {
+      background: #e2e8f0;
+      color: #0f172a;
+    }
+
+    /* EDITACE ZPRÁVY */
+    .edit-box {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+      min-width: 280px;
+    }
+    .edit-textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #4a90e2;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 1rem;
+      resize: vertical;
+      outline: none;
+    }
+    .edit-actions {
+      display: flex;
+      gap: 6px;
+      justify-content: flex-end;
+    }
+    .btn-save {
+      background: #4a90e2;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .btn-cancel {
+      background: #e2e8f0;
+      color: #475569;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    /* Markdown styly */
+    .a p { margin-top: 0; margin-bottom: 8px; }
+    .a p:last-child { margin-bottom: 0; }
+    .a ul, .a ol { margin: 8px 0; padding-left: 20px; }
+    .a code { background: #f1f5f9; padding: 2px 5px; border-radius: 4px; font-family: monospace; font-size: 0.9em; }
+    .a pre { background: #1e293b; color: #f8fafc; padding: 12px; border-radius: 8px; overflow-x: auto; margin: 8px 0; }
+
+    /* ANIMACE TŘÍ TEČEK PŘI PŘEMÝŠLENÍ */
+    .typing-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .typing-indicator span {
+      width: 6px;
+      height: 6px;
+      background-color: #64748b;
+      border-radius: 50%;
+      display: inline-block;
+      animation: bounce 1.4s infinite ease-in-out both;
+    }
+    .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+    .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1.0); }
+    }
+
+    form {
+      padding: 16px 24px 24px;
+      background: transparent;
+      width: 100%;
+      max-width: 800px;
+      margin: 0 auto;
+      transition: all 0.3s ease;
+    }
+    main:not(.empty-state) form {
+      background: #ffffff;
+      border-top: 1px solid #e2e8f0;
+      max-width: 100%;
+    }
+
+    .input-container {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 28px;
+      padding: 8px 16px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: box-shadow 0.2s, border-color 0.2s;
+    }
+    .input-container:focus-within {
+      border-color: #4a90e2;
+      box-shadow: 0 4px 20px rgba(74, 144, 226, 0.2);
+    }
+
+    textarea {
+      width: 100%;
+      height: 48px;
+      padding: 8px;
+      border: none;
+      background: transparent;
+      font-family: inherit;
+      resize: none;
+      font-size: 1rem;
+      outline: none;
+    }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 4px;
+    }
+    .checkbox-label {
+      font-size: 0.85rem;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    button[type="submit"] {
+      padding: 8px 20px;
+      border: 0;
+      border-radius: 20px;
+      background: #4a90e2;
+      color: #ffffff;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 0.9rem;
+      transition: background 0.2s;
+    }
+    button[type="submit"]:hover { background: #357abd; }
+  </style>
+</head>
+<body>
+
+  <aside>
+    <h2>Mistrův asistent</h2>
+    <button class="nav-btn" onclick="novyChat()">➕ Nový chat</button>
+    
+    <div class="history-title">Poslední</div>
+    <div id="chat-history-list"></div>
+
+    <button class="sidebar-btn" id="clear">Smazat historii</button>
+  </aside>
+
+  <main id="main-area" class="empty-state">
+    <header>
+      <h1 id="chat-title">Chatovací okno</h1>
+    </header>
+
+    <div class="welcome-title">Ptejte se, Goku!</div>
+
+    <div id="log"></div>
+
+    <form id="f">
+      <div class="input-container">
+        <textarea id="q" placeholder="Zeptat se asistenta..."></textarea>
+        <div class="row">
+          <label class="checkbox-label">
+            <input type="checkbox" id="web"> Hledat na webu
+          </label>
+          <button type="submit">Odeslat</button>
+        </div>
+      </div>
+    </form>
+  </main>
+
+  <script>
+    const log = document.getElementById("log");
+    const historyList = document.getElementById("chat-history-list");
+    const mainArea = document.getElementById("main-area");
+    
+    let chats = JSON.parse(localStorage.getItem("ai_chats") || "[]");
+    let currentChatId = null;
+
+    function saveChats() {
+      localStorage.setItem("ai_chats", JSON.stringify(chats));
+    }
+
+    function addBubble(cls, text, index) {
+      const group = document.createElement("div");
+      group.className = `msg-group ${cls}-group`;
+
+      const bubble = document.createElement("div");
+      bubble.className = cls;
+
+      if (cls === "q") {
+        bubble.textContent = text;
+      } else if (text) {
+        bubble.innerHTML = typeof marked !== "undefined" ? marked.parse(text) : text;
+      }
+
+      group.appendChild(bubble);
+
+      if (text) {
+        pridatAkcePodBublinu(group, bubble, cls, text, index);
+      }
+
+      log.appendChild(group);
+      log.scrollTop = log.scrollHeight;
+      return { group, bubble };
+    }
+
+    function pridatAkcePodBublinu(group, bubble, cls, text, index) {
+      if (group.querySelector(".action-bar")) return;
+
+      const actionBar = document.createElement("div");
+      actionBar.className = "action-bar";
+
+      // Kopírovat
+      const copyBtn = document.createElement("button");
+      copyBtn.className = "action-btn";
+      copyBtn.innerHTML = "📋 Kopírovat";
+      copyBtn.onclick = () => {
+        navigator.clipboard.writeText(text);
+        copyBtn.innerHTML = "✓ Zkopírováno";
+        setTimeout(() => { copyBtn.innerHTML = "📋 Kopírovat"; }, 2000);
+      };
+      actionBar.appendChild(copyBtn);
+
+      // Upravit (u otázek uživatele)
+      if (cls === "q") {
+        const editBtn = document.createElement("button");
+        editBtn.className = "action-btn";
+        editBtn.innerHTML = "✏️ Upravit";
+        editBtn.onclick = () => zapnoutEditaci(group, bubble, text, index);
+        actionBar.appendChild(editBtn);
+      }
+
+      // Znovu vygenerovat (u odpovědí AI)
+      if (cls === "a") {
+        const regenBtn = document.createElement("button");
+        regenBtn.className = "action-btn";
+        regenBtn.innerHTML = "🔄 Znovu vygenerovat";
+        regenBtn.onclick = () => regenerovatOdpoved(index);
+        actionBar.appendChild(regenBtn);
+      }
+
+      group.appendChild(actionBar);
+    }
+
+    function regenerovatOdpoved(index) {
+      let chat = chats.find(c => c.id === currentChatId);
+      if (!chat || index < 1) return;
+
+      const predchoziOtazka = chat.messages[index - 1].text;
+      chat.messages = chat.messages.slice(0, index - 1);
+      
+      nacistChat(currentChatId);
+      poslatDotaz(predchoziOtazka);
+    }
+
+    function zapnoutEditaci(group, bubble, staryText, index) {
+      const actionBar = group.querySelector(".action-bar");
+      bubble.style.display = "none";
+      if (actionBar) actionBar.style.display = "none";
+
+      const editBox = document.createElement("div");
+      editBox.className = "edit-box";
+
+      const textarea = document.createElement("textarea");
+      textarea.className = "edit-textarea";
+      textarea.value = staryText;
+
+      const actions = document.createElement("div");
+      actions.className = "edit-actions";
+
+      const saveBtn = document.createElement("button");
+      saveBtn.className = "btn-save";
+      saveBtn.textContent = "Uložit & Odeslat";
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.className = "btn-cancel";
+      cancelBtn.textContent = "Zrušit";
+
+      actions.appendChild(cancelBtn);
+      actions.appendChild(saveBtn);
+
+      editBox.appendChild(textarea);
+      editBox.appendChild(actions);
+      group.appendChild(editBox);
+
+      textarea.focus();
+
+      cancelBtn.onclick = () => {
+        editBox.remove();
+        bubble.style.display = "block";
+        if (actionBar) actionBar.style.display = "flex";
+      };
+
+      saveBtn.onclick = () => {
+        const novyText = textarea.value.trim();
+        if (!novyText) return;
+
+        let chat = chats.find(c => c.id === currentChatId);
+        if (!chat) return;
+
+        chat.messages = chat.messages.slice(0, index);
+        nacistChat(currentChatId);
+        poslatDotaz(novyText);
+      };
+    }
+
+    function renderSidebar() {
+      historyList.innerHTML = "";
+      chats.forEach(chat => {
+        if (!chat.messages || chat.messages.length === 0) return;
+
+        const item = document.createElement("div");
+        item.className = "history-item" + (chat.id === currentChatId ? " active" : "");
+        
+        const titleSpan = document.createElement("span");
+        titleSpan.className = "history-item-title";
+        titleSpan.textContent = chat.title || "Nový chat";
+        titleSpan.onclick = () => nacistChat(chat.id);
+
+        const actionsDiv = document.createElement("div");
+        actionsDiv.className = "history-actions";
+
+        const editTitleBtn = document.createElement("button");
+        editTitleBtn.className = "icon-btn";
+        editTitleBtn.innerHTML = "✏️";
+        editTitleBtn.title = "Přejmenovat chat";
+        editTitleBtn.onclick = (e) => {
+          e.stopPropagation();
+          
+          const input = document.createElement("input");
+          input.type = "text";
+          input.className = "history-rename-input";
+          input.value = chat.title;
+          
+          item.replaceChild(input, titleSpan);
+          actionsDiv.style.display = "none";
+          input.focus();
+          input.select();
+
+          const ulozitNazev = () => {
+            const novyNazev = input.value.trim();
+            if (novyNazev) {
+              chat.title = novyNazev;
+              saveChats();
+              if (chat.id === currentChatId) {
+                document.getElementById("chat-title").textContent = novyNazev;
+              }
+            }
+            renderSidebar();
+          };
+
+          input.onblur = ulozitNazev;
+          input.onkeydown = (ev) => {
+            if (ev.key === "Enter") {
+              ulozitNazev();
+            } else if (ev.key === "Escape") {
+              renderSidebar();
+            }
+          };
+        };
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "icon-btn";
+        deleteBtn.innerHTML = "🗑️";
+        deleteBtn.title = "Smazat chat";
+        deleteBtn.onclick = (e) => {
+          e.stopPropagation();
+          smazatJedenChat(chat.id);
+        };
+
+        actionsDiv.appendChild(editTitleBtn);
+        actionsDiv.appendChild(deleteBtn);
+        item.appendChild(titleSpan);
+        item.appendChild(actionsDiv);
+
+        historyList.appendChild(item);
+      });
+    }
+
+    function smazatJedenChat(id) {
+      chats = chats.filter(c => c.id !== id);
+      saveChats();
+      if (currentChatId === id) {
+        if (chats.length > 0) {
+          nacistChat(chats[0].id);
+        } else {
+          novyChat();
+        }
+      } else {
+        renderSidebar();
+      }
+    }
+
+    function nacistChat(id) {
+      currentChatId = id;
+      const chat = chats.find(c => c.id === id);
+      log.innerHTML = "";
+      
+      if (chat && chat.messages && chat.messages.length > 0) {
+        mainArea.classList.remove("empty-state");
+        document.getElementById("chat-title").textContent = chat.title;
+        chat.messages.forEach((m, idx) => {
+          addBubble(m.cls, m.text, idx);
+        });
+      } else {
+        mainArea.classList.add("empty-state");
+      }
+      renderSidebar();
+    }
+
+    function novyChat() {
+      currentChatId = null;
+      log.innerHTML = "";
+      document.getElementById("q").value = "";
+      mainArea.classList.add("empty-state");
+      renderSidebar();
+    }
+
+    if (chats.length > 0 && chats[0].messages && chats[0].messages.length > 0) {
+      nacistChat(chats[0].id);
+    } else {
+      novyChat();
+    }
+
+    document.getElementById("clear").onclick = async () => {
+      try { await fetch("/clear", { method: "POST" }); } catch(e) {}
+      chats = [];
+      localStorage.removeItem("ai_chats");
+      novyChat();
+    };
+
+    document.getElementById("q").addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById("f").requestSubmit();
+      }
+    });
+
+    async function poslatDotaz(question) {
+      let chat = chats.find(c => c.id === currentChatId);
+      if (!chat) {
+        currentChatId = Date.now();
+        chat = { id: currentChatId, title: question, messages: [] };
+        chats.unshift(chat);
+      }
+
+      mainArea.classList.remove("empty-state");
+
+      if (chat.messages.length === 0) {
+        chat.title = question;
+        document.getElementById("chat-title").textContent = question;
+      }
+
+      const qIndex = chat.messages.length;
+      chat.messages.push({ cls: "q", text: question });
+      addBubble("q", question, qIndex);
+      saveChats();
+      renderSidebar();
+
+      document.getElementById("q").value = "";
+      
+      const aIndex = chat.messages.length;
+      const { group, bubble } = addBubble("a", "", aIndex);
+      bubble.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+
+      let firstChunkReceived = false;
+
+      try {
+        const res = await fetch("/ask", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            question: question,
+            use_web: document.getElementById("web").checked,
+            messages: chat.messages.map(m => ({
+              role: m.cls === "q" ? "user" : "assistant",
+              content: m.text
+            }))
+          })
+        });
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let fullAnswer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split("\n");
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const data = JSON.parse(line);
+              const textPiece = data.response || data.token;
+              
+              if (textPiece) {
+                if (!firstChunkReceived) {
+                  bubble.innerHTML = "";
+                  firstChunkReceived = true;
+                }
+                fullAnswer += textPiece;
+                bubble.innerHTML = typeof marked !== "undefined" ? marked.parse(fullAnswer) : fullAnswer;
+                log.scrollTop = log.scrollHeight;
+              } else if (data.error) {
+                bubble.textContent = data.error;
+              }
+            } catch (err) {
+              // Ignorovat neúplné řádky
+            }
+          }
+        }
+
+        pridatAkcePodBublinu(group, bubble, "a", fullAnswer, aIndex);
+        chat.messages.push({ cls: "a", text: fullAnswer });
+        saveChats();
+
+      } catch (err) {
+        bubble.textContent = "Chyba při komunikaci se serverem.";
+      }
+    }
+
+    document.getElementById("f").onsubmit = (e) => {
+      e.preventDefault();
+      const question = document.getElementById("q").value.trim();
+      if (question) {
+        poslatDotaz(question);
+      }
+    };
+  </script>
+</body>
+</html>
