@@ -6,8 +6,7 @@ from groq import Groq
 app = Flask(__name__)
 
 # Vložte váš API klíč přímo do uvozovek níže, např.: "gsk_..."
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY") or "ZDE_VLOZTE_VAS_GROQ_API_KLIC"
-
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=GROQ_API_KEY)
 
 @app.route("/")
