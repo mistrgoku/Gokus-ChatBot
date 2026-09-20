@@ -427,7 +427,7 @@
         <textarea id="q" placeholder="Zeptat se asistenta..."></textarea>
         <div class="row">
           <label class="checkbox-label">
-            <input type="checkbox" id="web"> Hledat na webu
+            <input type="checkbox" id="web"> Použít velký model (120B)
           </label>
           <button type="submit">Odeslat</button>
         </div>
@@ -739,7 +739,6 @@
           body: JSON.stringify({ 
             model: document.getElementById("web").checked ? "openai/gpt-oss-120b" : "openai/gpt-oss-20b",
             question: question,
-            use_web: document.getElementById("web").checked,
             messages: chat.messages.map(m => ({
               role: m.cls === "q" ? "user" : "assistant",
               content: m.text
@@ -770,7 +769,7 @@
               if (rawData === "[DONE]") break;
               try {
                 const parsed = JSON.parse(rawData);
-                textPiece = parsed.response || parsed.token || parsed.answer || "";
+                textPiece = parsed.text || parsed.response || parsed.token || parsed.answer || "";
               } catch (e) {
                 textPiece = rawData.replace(/\\n/g, "\n");
               }
@@ -779,7 +778,7 @@
             else {
               try {
                 const data = JSON.parse(line);
-                textPiece = data.response || data.token || data.answer || "";
+                textPiece = data.text || data.response || data.token || data.answer || "";
                 if (data.error) {
                   bubble.textContent = data.error;
                   return;
