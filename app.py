@@ -1,13 +1,11 @@
 import os
-import json
-from flask import Flask, render_template, request, Response
+from flask import Flask, render_template, request, jsonify
 from groq import Groq
 
 app = Flask(__name__)
 
-# Vložte váš API klíč přímo do uvozovek níže, např.: "gsk_..."
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY") or "ZDE_VLOZTE_VAS_GROQ_API_KLIC"
-
+# Načtení API klíče z prostředí na Renderu
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=GROQ_API_KEY)
 
 @app.route("/")
@@ -18,34 +16,27 @@ def index():
 def ask():
     data = request.json or {}
     user_question = data.get("question", "")
-    history_messages = data.get("messages", [])
+    history_messages = data.get("history", [])
 
-    messages = [
-        {"role": "system", "content": "Jsi užitečný a přátelský asistent."}
-    ]
-    
+    messages = [{"role": "system", "content": "Jsi užitečný AI asistent."}]
+
     for msg in history_messages:
         messages.append({"role": msg.get("role"), "content": msg.get("content")})
 
-    def generate():
-        try:
-            stream = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=messages,
-                stream=True,
-            )
-            for chunk in stream:
-                content = chunk.choices[0].delta.content
-                if content:
-                    yield json.dumps({"token": content}) + "\n"
-        except Exception as e:
-            yield json.dumps({"error": str(e)}) + "\n"
+    messages.append({"role": "user", "content": user_question})
 
-    return Response(generate(), mimetype="application/x-ndjson")
-
-@app.route("/clear", methods=["POST"])
-def clear():
-    return json.dumps({"status": "success"})
+    try:
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=messages,
+            temperature=0.7,
+            max_tokens=1024,
+        )
+        answer = completion.choices[0].message.content
+        return jsonify({"answer": answer})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(host="0.0.0.0", port=5000, debug=True)
+    
