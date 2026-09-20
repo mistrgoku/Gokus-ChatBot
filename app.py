@@ -1,5 +1,6 @@
 import os
-from flask import Flask, render_template, request, jsonify
+import json
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context
 from groq import Groq
 
 app = Flask(__name__)
@@ -10,8 +11,8 @@ client = Groq(api_key=api_key) if api_key else None
 
 # Použití volně dostupných modelů z Groq API
 MODELS_TO_TRY = [
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b"
+    "llama-3.3-70b-versatile",
+    "llama3-8b-8192"
 ]
 
 @app.route("/")
@@ -45,28 +46,31 @@ def ask():
 
     messages.append({"role": "user", "content": user_message})
 
-    # Vyzkoušíme postupně dostupné modely
-    for model_name in MODELS_TO_TRY:
-        try:
-            completion = client.chat.completions.create(
-                messages=messages,
-                model=model_name,
-                temperature=0.7,
-                max_tokens=1024,
-            )
-            bot_response = completion.choices[0].message.content
-            return jsonify({
-                "answer": bot_response,
-                "response": bot_response
-            }), 200
-        except Exception as e:
-            print(f"Model {model_name} selhal: {e}. Zkouším další...")
-            continue
+    # Generátor pro postupný přenos odpovědi (streamování po slovech)
+    def generate():
+        for model_name in MODELS_TO_TRY:
+            try:
+                completion = client.chat.completions.create(
+                    messages=messages,
+                    model=model_name,
+                    temperature=0.7,
+                    max_tokens=1024,
+                    stream=True  # Zapnuto streamování
+                )
+                for chunk in completion:
+                    content = chunk.choices[0].delta.content or ""
+                    if content:
+                        # Odeslání kousku textu ve formátu Server-Sent Events (SSE)
+                        yield f"data: {json.dumps({'text': content})}\n\n"
+                return  # Úspěšně dokončeno, ukončíme generování
+            except Exception as e:
+                print(f"Model {model_name} selhal: {e}. Zkouším další...")
+                continue
 
-    return jsonify({
-        "answer": "Omlouvám se, všechny AI modely jsou momentálně nedostupné.",
-        "response": "Omlouvám se, všechny AI modely jsou momentálně nedostupné."
-    }), 500
+        # Pokud selžou všechny modely
+        yield f"data: {json.dumps({'text': ' Omlouvám se, všechny AI modely jsou momentálně nedostupné.'})}\n\n"
+
+    return Response(stream_with_context(generate()), content_type="text/event-stream")
 
 @app.route("/clear", methods=["POST"])
 def clear():
