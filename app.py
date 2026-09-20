@@ -1,4 +1,4 @@
-imimport os
+import os
 import json
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context
 from groq import Groq
@@ -9,7 +9,7 @@ app = Flask(__name__)
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
-# Tvoje původní modely z Groq API
+# Tvoje modely
 MODELS_TO_TRY = [
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b"
@@ -57,19 +57,17 @@ def ask():
                     model=model_name,
                     temperature=0.7,
                     max_tokens=1024,
-                    stream=True  # Zapnuto postupné generování
+                    stream=True
                 )
                 for chunk in completion:
                     content = chunk.choices[0].delta.content or ""
                     if content:
-                        # Posíláme každý kousek textu v SSE formátu
                         yield f"data: {json.dumps({'text': content})}\n\n"
-                return  # Pokud model úspěšně dokončil stream, ukončíme funkci
+                return
             except Exception as e:
                 print(f"Model {model_name} selhal: {e}. Zkouším další...")
                 continue
 
-        # Pokud selžou všechny modely
         yield f"data: {json.dumps({'text': 'Omlouvám se, všechny AI modely jsou momentálně nedostupné.'})}\n\n"
 
     return Response(stream_with_context(generate()), content_type="text/event-stream")
