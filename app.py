@@ -12,28 +12,21 @@ client = Groq(
 def index():
     return render_template('index.html')
 
-# TADY JSME ZMĚNILI /chat NA /ask, ABY TO ODPOVÍDALO TVÉMU FRONTONDU
 @app.route('/ask', methods=['POST'])
 def ask():
     try:
-        data = request.json
-        # Načteme zprávu (podporuje klíče "message" i "prompt")
-        user_message = data.get("message") or data.get("prompt") or ""
-
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "user", "content": user_message}
-            ]
-        )
-
-        bot_reply = response.choices[0].message.content
-        return jsonify({"response": bot_reply, "answer": bot_reply})
+        # Získat seznam všech dostupných modelů přímo z Groq API
+        models_page = client.models.list()
+        available_models = [m.id for m in models_page.data]
+        
+        # Vrátíme seznam modelů do chatu jako test
+        return jsonify({
+            "response": f"TEST ÚSPĚŠNÝ! Tvůj API klíč má přístup k těmto modelům: {', '.join(available_models)}"
+        })
 
     except Exception as e:
-        return jsonify({"error": f"TEST CHYBA: {str(e)}"}), 500
+        return jsonify({"error": f"TEST CHYBA PŘI NAČÍTÁNÍ MODELŮ: {str(e)}"}), 500
 
-# PŘIDÁNO /clear, ABY TLAČÍTKO NA VYČIŠTĚNÍ CHATU NEHÁZELO CHYBU 404
 @app.route('/clear', methods=['POST'])
 def clear():
     return jsonify({"status": "cleared"})
