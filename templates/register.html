@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Registrace - Mistrův asistent</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      margin: 0; padding: 0;
+      background: radial-gradient(circle at center, #ffffff 0%, #edf2f7 100%);
+      color: #1f1f1f;
+      display: flex; justify-content: center; align-items: center;
+      height: 100vh;
+    }
+    .card {
+      background: #ffffff;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      width: 100%; max-width: 400px;
+      border: 1px solid #e2e8f0;
+    }
+    h2 { margin-top: 0; color: #4a90e2; text-align: center; margin-bottom: 24px; }
+    .error {
+      background: #fed7d7; color: #c53030; padding: 10px;
+      border-radius: 8px; font-size: 0.9rem; margin-bottom: 16px; text-align: center;
+    }
+    .form-group { margin-bottom: 16px; display: flex; flex-direction: column; gap: 6px; }
+    label { font-size: 0.9rem; font-weight: 600; color: #4a5568; }
+    input {
+      padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px;
+      font-size: 1rem; outline: none; transition: border-color 0.2s;
+    }
+    input:focus { border-color: #4a90e2; box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15); }
+    button {
+      width: 100%; padding: 12px; background: #4a90e2; color: white;
+      border: none; border-radius: 8px; font-weight: bold; font-size: 1rem;
+      cursor: pointer; transition: background 0.2s; margin-top: 8px;
+    }
+    button:hover { background: #357abd; }
+    .link { text-align: center; margin-top: 16px; font-size: 0.9rem; color: #64748b; }
+    .link a { color: #4a90e2; text-decoration: none; font-weight: 600; }
+    .link a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Registrace</h2>
+    {% if error %}
+      <div class="error">{{ error }}</div>
+    {% endif %}
+    <form method="POST">
+      <div class="form-group">
+        <label>Jak ti má AI říkat (Jméno)</label>
+        <input type="text" name="display_name" required placeholder="Goku">
+      </div>
+      <div class="form-group">
+        <label>E-mail</label>
+        <input type="email" name="email" required placeholder="tvuj@email.cz">
+      </div>
+      <div class="form-group">
+        <label>Heslo</label>
+        <input type="password" name="password" required placeholder="••••••••">
+      </div>
+      <button type="submit">Zaregistrovat se</button>
+    </form>
+    <div class="link">
+      Už máš účet? <a href="{{ url_for('login') }}">Přihlas se</a>
+    </div>
+  </div>
+</body>
+</html>
