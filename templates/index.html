@@ -737,6 +737,7 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
+            model: document.getElementById("web").checked ? "openai/gpt-oss-120b" : "openai/gpt-oss-20b",
             question: question,
             use_web: document.getElementById("web").checked,
             messages: chat.messages.map(m => ({
