@@ -4,40 +4,35 @@ from groq import Groq
 
 app = Flask(__name__)
 
-# Načtení API klíče z prostředí na Renderu
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-client = Groq(api_key=GROQ_API_KEY)
+# Načtení API klíče z prostředí
+client = Groq(
+    api_key=os.environ.get("GROQ_API_KEY"),
+)
 
-@app.route("/")
+@app.route('/')
 def index():
-    return render_template("index.html")
+    return render_template('index.html')
 
-@app.route("/ask", methods=["POST"])
-def ask():
-    data = request.json or {}
-    user_question = data.get("question", "")
-    history_messages = data.get("history", [])
-
-    messages = [{"role": "system", "content": "Jsi užitečný AI asistent."}]
-
-    for msg in history_messages:
-        messages.append({"role": msg.get("role"), "content": msg.get("content")})
-
-    messages.append({"role": "user", "content": user_question})
-
+@app.route('/chat', methods=['POST'])
+def chat():
     try:
-        completion = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=messages,
-            temperature=0.7,
-            max_tokens=1024,
-        )
-        answer = completion.choices[0].message.content
-        return jsonify({"answer": answer})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        data = request.json
+        user_message = data.get("message", "")
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
-    
-    
+        # Volání aktuálně funkčního modelu Groq
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "user", "content": user_message}
+            ]
+        )
+
+        bot_reply = response.choices[0].message.content
+        return jsonify({"response": bot_reply})
+
+    except Exception as e:
+        # TEST CHYBA pro ověření, že Render načítá nový kód z GitHubu
+        return jsonify({"error": f"TEST CHYBA: {str(e)}"}), 500
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
