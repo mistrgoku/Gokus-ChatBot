@@ -39,8 +39,8 @@ def ask():
 
     history_messages = data.get("history", [])
     
-    # System prompt – bot ví, že ho vytvořil Goku
-    messages = [{"role": "system", "content": "Jsi užitečný a přátelský AI asistent. Tvým tvůrcem a programátorem je Goku. Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, hrdě odpověz, že tě vytvořil Goku."}]
+    # System prompt nastavený přesně podle tvého přání
+    messages = [{"role": "system", "content": "Jsi užitečný a přátelský AI asistent. Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, odpověz přesně touto větou: 'Vytvořil mě člověk jménem Goku.'"}]
 
     for msg in history_messages:
         if isinstance(msg, dict) and "role" in msg and "content" in msg:
