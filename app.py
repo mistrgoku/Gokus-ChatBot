@@ -30,7 +30,7 @@ def ask():
     def generate():
         try:
             stream = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="llama3-8b-8192",
                 messages=messages,
                 stream=True,
             )
