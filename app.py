@@ -9,10 +9,10 @@ app = Flask(__name__)
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
-# Použití volně dostupných modelů z Groq API
+# Použití volně dostupných modelů z Groq API (ponechány přesně tvé modely)
 MODELS_TO_TRY = [
-    "llama-3.3-70b-versatile",
-    "llama3-8b-8192"
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b"
 ]
 
 @app.route("/")
@@ -46,7 +46,7 @@ def ask():
 
     messages.append({"role": "user", "content": user_message})
 
-    # Generátor pro postupný přenos odpovědi (streamování po slovech)
+    # Generátor pro postupné streamování odpovědi
     def generate():
         for model_name in MODELS_TO_TRY:
             try:
@@ -55,14 +55,13 @@ def ask():
                     model=model_name,
                     temperature=0.7,
                     max_tokens=1024,
-                    stream=True  # Zapnuto streamování
+                    stream=True  # Zapnutí streamování
                 )
                 for chunk in completion:
                     content = chunk.choices[0].delta.content or ""
                     if content:
-                        # Odeslání kousku textu ve formátu Server-Sent Events (SSE)
                         yield f"data: {json.dumps({'text': content})}\n\n"
-                return  # Úspěšně dokončeno, ukončíme generování
+                return  # Úspěšně odesláno, ukončíme funkci
             except Exception as e:
                 print(f"Model {model_name} selhal: {e}. Zkouším další...")
                 continue
