@@ -1,4 +1,4 @@
-import os
+imimport os
 import json
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context
 from groq import Groq
@@ -9,7 +9,7 @@ app = Flask(__name__)
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
-# Použití volně dostupných modelů z Groq API (přesně podle tvého zadání)
+# Tvoje původní modely z Groq API
 MODELS_TO_TRY = [
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b"
@@ -38,7 +38,9 @@ def ask():
         }), 400
 
     history_messages = data.get("history", [])
-    messages = [{"role": "system", "content": "Jsi užitečný a přátelský AI asistent."}]
+    
+    # System prompt – bot ví, že ho vytvořil Goku
+    messages = [{"role": "system", "content": "Jsi užitečný a přátelský AI asistent. Tvým tvůrcem a programátorem je Goku. Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, hrdě odpověz, že tě vytvořil Goku."}]
 
     for msg in history_messages:
         if isinstance(msg, dict) and "role" in msg and "content" in msg:
