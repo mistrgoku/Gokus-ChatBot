@@ -92,11 +92,21 @@ def ask():
             "response": "Napiš prosím nějakou zprávu."
         }), 400
 
-    # OPRAVENO: Čteme "messages" tak, jak je posílá frontend (místo "history")
+    # Čteme "messages" tak, jak je posílá frontend
     incoming_messages = data.get("messages", [])
     
     display_name = session.get("display_name", "Goku")
-    system_content = f"Jsi užitečný a přátelský AI asistent. Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramował, odpověz přesně touto větou: 'Vytvořil mě člověk jménem Goku.' Uživatel, se kterým mluvíš, se jmenuje {display_name}."
+    user_email = session.get("user_email", "")
+
+    # Systémové instrukce včetně detekce e-mailové domény a podpory jazyků
+    system_content = (
+        f"Jsi Mistrův asistent, užitečný a přátelský AI asistent, kterým tě vytvořil člověk jménem Goku. "
+        f"Uživatel, se kterým mluvíš, se jmenuje {display_name} a jeho e-mail je '{user_email}'. "
+        f"Automaticky detekuj zemi, národní doménu e-mailu uživatele (.cz, .sk, .de, .fr, .es, .jp, .kr, .cn, .ru apod.) "
+        f"nebo jazyk jeho dotazu a ODPOVÍDEJ VŽDY V TOMTO DANÉM JAZYCE. "
+        f"Máš kompletní znalost všech 100+ světových jazyků a dialektů (včetně korejštiny, japonštiny, němčiny, francouzštiny atd.). "
+        f"Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, odpověz přesně touto větou: 'Vytvořil mě člověk jménem Goku.'"
+    )
     
     messages = [{"role": "system", "content": system_content}]
 
