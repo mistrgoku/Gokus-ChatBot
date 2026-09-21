@@ -772,6 +772,10 @@
           body: JSON.stringify({ 
             model: document.getElementById("web").checked ? "openai/gpt-oss-120b" : "openai/gpt-oss-20b",
             question: question,
+            history: chat.messages.slice(0, -1).map(m => ({
+              role: m.cls === "q" ? "user" : "assistant",
+              content: m.text
+            })),
             messages: chat.messages.map(m => ({
               role: m.cls === "q" ? "user" : "assistant",
               content: m.text
