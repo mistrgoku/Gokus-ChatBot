@@ -92,18 +92,21 @@ def ask():
             "response": "Napiš prosím nějakou zprávu."
         }), 400
 
-    history_messages = data.get("history", [])
+    # OPRAVENO: Čteme "messages" tak, jak je posílá frontend (místo "history")
+    incoming_messages = data.get("messages", [])
     
     display_name = session.get("display_name", "Goku")
     system_content = f"Jsi užitečný a přátelský AI asistent. Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramował, odpověz přesně touto větou: 'Vytvořil mě člověk jménem Goku.' Uživatel, se kterým mluvíš, se jmenuje {display_name}."
     
     messages = [{"role": "system", "content": system_content}]
 
-    for msg in history_messages:
+    for msg in incoming_messages:
         if isinstance(msg, dict) and "role" in msg and "content" in msg:
             messages.append({"role": msg["role"], "content": msg["content"]})
 
-    messages.append({"role": "user", "content": user_message})
+    # Pokud poslední zpráva v incoming_messages již není uživatelův aktuální dotaz, připojíme ho
+    if not incoming_messages or incoming_messages[-1].get("content") != user_message:
+        messages.append({"role": "user", "content": user_message})
 
     def generate():
         for model_name in MODELS_TO_TRY:
