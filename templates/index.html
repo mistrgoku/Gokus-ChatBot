@@ -389,7 +389,7 @@
       box-shadow: 0 4px 20px rgba(74, 144, 226, 0.2);
     }
 
-    /* PŘIDANÝ NÁHLED OBRÁZKU NAD INPUTEM */
+    /* NÁHLED OBRÁZKU NAD INPUTEM */
     .image-preview-container {
       display: none;
       position: relative;
@@ -530,6 +530,7 @@
     const log = document.getElementById("log");
     const historyList = document.getElementById("chat-history-list");
     const mainArea = document.getElementById("main-area");
+    const textArea = document.getElementById("q");
     
     let chats = JSON.parse(localStorage.getItem("ai_chats") || "[]");
     let currentChatId = null;
@@ -539,15 +540,19 @@
       localStorage.setItem("ai_chats", JSON.stringify(chats));
     }
 
+    function nastavitObrazek(src) {
+      selectedImageBase64 = src;
+      document.getElementById("img-preview").src = src;
+      document.getElementById("img-preview-box").style.display = "block";
+    }
+
     function nacticitObrazek(input) {
       const file = input.files[0];
       if (!file) return;
 
       const reader = new FileReader();
       reader.onload = function(e) {
-        selectedImageBase64 = e.target.result;
-        document.getElementById("img-preview").src = selectedImageBase64;
-        document.getElementById("img-preview-box").style.display = "block";
+        nastavitObrazek(e.target.result);
       };
       reader.readAsDataURL(file);
     }
@@ -558,6 +563,24 @@
       document.getElementById("img-preview-box").style.display = "none";
       document.getElementById("img-preview").src = "";
     }
+
+    /* PŘIDANÁ PODPORA PRO CTRL + V (VLOŽENÍ OBRÁZKU ZE SCHRÁNKY) */
+    window.addEventListener("paste", function(e) {
+      const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+      for (let index in items) {
+        const item = items[index];
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const blob = item.getAsFile();
+          const reader = new FileReader();
+          reader.onload = function(event) {
+            nastavitObrazek(event.target.result);
+          };
+          reader.readAsDataURL(blob);
+          e.preventDefault(); // zabrání vložení textových dat z obr. kódu
+          break;
+        }
+      }
+    });
 
     function addBubble(cls, text, index, imageBase64) {
       const group = document.createElement("div");
@@ -795,7 +818,7 @@
     function novyChat() {
       currentChatId = null;
       log.innerHTML = "";
-      document.getElementById("q").value = "";
+      textArea.value = "";
       odstranitObrazek();
       mainArea.classList.add("empty-state");
       renderSidebar();
@@ -814,7 +837,7 @@
       novyChat();
     };
 
-    document.getElementById("q").addEventListener("keydown", (e) => {
+    textArea.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         document.getElementById("f").requestSubmit();
@@ -845,7 +868,7 @@
       saveChats();
       renderSidebar();
 
-      document.getElementById("q").value = "";
+      textArea.value = "";
       odstranitObrazek();
       
       const aIndex = chat.messages.length;
@@ -933,7 +956,7 @@
 
     document.getElementById("f").onsubmit = (e) => {
       e.preventDefault();
-      const question = document.getElementById("q").value.trim();
+      const question = textArea.value.trim();
       if (question || selectedImageBase64) {
         poslatDotaz(question);
       }
