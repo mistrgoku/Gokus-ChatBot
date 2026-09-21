@@ -13,14 +13,19 @@ client = Groq(api_key=api_key) if api_key else None
 # Jednoduché úložiště pro uživatele v paměti
 users = {}
 
-# Tvoje modely pro text
+# Tvoje fungující modely pro běžný text
 MODELS_TO_TRY = [
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b"
 ]
 
-# Model pro zpracování obrázků (Vision)
-VISION_MODEL = "llama-3.2-11b-vision-preview"
+# Modely pro zpracování obrázků (Vision)
+VISION_MODELS = [
+    "llama-3.2-11b-vision-preview",
+    "llama-3.2-90b-vision-preview",
+    "qwen/qwen3.8-27b",
+    "meta-llama/llama-4-scout-17b-16e-instruct"
+]
 
 @app.route("/")
 def home():
@@ -111,15 +116,15 @@ def ask():
     
     messages = [{"role": "system", "content": system_content}]
 
-    # Přidání historie konverzace (pouze čisté texty)
+    # Přidání historie konverzace (pouze čistý text pro zachování funkčnosti)
     for msg in incoming_messages[:-1]:
         if isinstance(msg, dict) and "role" in msg and "content" in msg:
             if isinstance(msg["content"], str):
                 messages.append({"role": msg["role"], "content": msg["content"]})
 
-    # Sestavení poslední uživatelské zprávy
+    # Sestavení aktuální uživatelské zprávy
     if image_base64:
-        # Oprava: Přidání formátovacího prefixu pro Base64, pokud chybí
+        # Přidání správného prefixu pro Base64
         if not image_base64.startswith("data:image/"):
             image_url_formatted = f"data:image/jpeg;base64,{image_base64}"
         else:
@@ -139,8 +144,8 @@ def ask():
     else:
         messages.append({"role": "user", "content": user_message})
 
-    # Určení modelů k vyzkoušení
-    models_to_run = [VISION_MODEL] if image_base64 else MODELS_TO_TRY
+    # Výběr seznamu modelů podle vstupu
+    models_to_run = VISION_MODELS if image_base64 else MODELS_TO_TRY
 
     def generate():
         for model_name in models_to_run:
