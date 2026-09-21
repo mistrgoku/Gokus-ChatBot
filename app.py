@@ -13,15 +13,17 @@ client = Groq(api_key=api_key) if api_key else None
 # Jednoduché úložiště pro uživatele v paměti
 users = {}
 
-# Tvoje modely
+# Tvoje modely pro text
 MODELS_TO_TRY = [
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b"
 ]
 
+# Model pro zpracování obrázků (Vision)
+VISION_MODEL = "llama-3.2-11b-vision-preview"
+
 @app.route("/")
 def home():
-    # Pokud uživatel není přihlášený, přesměruj ho na přihlášení
     if "user_email" not in session:
         return redirect(url_for("login"))
     display_name = session.get("display_name", "Goku")
@@ -85,41 +87,56 @@ def ask():
     data = request.get_json() or {}
     user_message = data.get("question") or data.get("message") or data.get("text") or ""
     user_message = user_message.strip()
+    image_base64 = data.get("image")  # Přečteme přiložený obrázek v Base64
 
-    if not user_message:
+    if not user_message and not image_base64:
         return jsonify({
-            "answer": "Napiš prosím nějakou zprávu.",
-            "response": "Napiš prosím nějakou zprávu."
+            "answer": "Napiš prosím nějakou zprávu nebo přilož obrázek.",
+            "response": "Napiš prosím nějakou zprávu nebo přilož obrázek."
         }), 400
 
-    # Čteme "messages" tak, jak je posílá frontend
     incoming_messages = data.get("messages", [])
-    
     display_name = session.get("display_name", "Goku")
     user_email = session.get("user_email", "")
 
-    # Systémové instrukce včetně detekce e-mailové domény a podpory jazyků
+    # Systémové instrukce
     system_content = (
         f"Jsi Mistrův asistent, užitečný a přátelský AI asistent, kterým tě vytvořil člověk jménem Goku. "
         f"Uživatel, se kterým mluvíš, se jmenuje {display_name} a jeho e-mail je '{user_email}'. "
-        f"Automaticky detekuj zemi, národní doménu e-mailu uživatele (.cz, .sk, .de, .fr, .es, .jp, .kr, .cn, .ru apod.) "
+        f"Automaticky detekuj zemi, národní doménu e-mailu uživatele (.cz, .sk, .de, .fr apod.) "
         f"nebo jazyk jeho dotazu a ODPOVÍDEJ VŽDY V TOMTO DANÉM JAZYCE. "
-        f"Máš kompletní znalost všech 100+ světových jazyků a dialektů (včetně korejštiny, japonštiny, němčiny, francouzštiny atd.). "
-        f"Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, odpověz přesně touto větou: 'Vytvořil mě člověk jménem Goku.'"
+        f"Máš kompletní znalost všech 100+ světových jazyků. "
+        f"Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, odpověz přesně touto větičkou: 'Vytvořil mě člověk jménem Goku.'"
     )
     
     messages = [{"role": "system", "content": system_content}]
 
-    for msg in incoming_messages:
+    # Přidání historie konverzace (pouze textové zprávy pro historii)
+    for msg in incoming_messages[:-1]:
         if isinstance(msg, dict) and "role" in msg and "content" in msg:
             messages.append({"role": msg["role"], "content": msg["content"]})
 
-    # Pokud poslední zpráva v incoming_messages již není uživatelův aktuální dotaz, připojíme ho
-    if not incoming_messages or incoming_messages[-1].get("content") != user_message:
+    # Sestavení poslední uživatelské zprávy (podle toho, zda obsahuje obrázek)
+    if image_base64:
+        text_prompt = user_message if user_message else "Co je na tomto obrázku?"
+        user_content = [
+            {"type": "text", "text": text_prompt},
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": image_base64
+                }
+            }
+        ]
+        messages.append({"role": "user", "content": user_content})
+    else:
         messages.append({"role": "user", "content": user_message})
 
+    # Určení modelů k vyzkoušení (pokud je přítomen obrázek, použije se Vision model)
+    models_to_run = [VISION_MODEL] if image_base64 else MODELS_TO_TRY
+
     def generate():
-        for model_name in MODELS_TO_TRY:
+        for model_name in models_to_run:
             try:
                 completion = client.chat.completions.create(
                     messages=messages,
@@ -148,4 +165,3 @@ def clear():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-    
