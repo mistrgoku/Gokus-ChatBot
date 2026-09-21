@@ -111,20 +111,27 @@ def ask():
     
     messages = [{"role": "system", "content": system_content}]
 
-    # Přidání historie konverzace (pouze textové zprávy pro historii)
+    # Přidání historie konverzace (pouze čisté texty)
     for msg in incoming_messages[:-1]:
         if isinstance(msg, dict) and "role" in msg and "content" in msg:
-            messages.append({"role": msg["role"], "content": msg["content"]})
+            if isinstance(msg["content"], str):
+                messages.append({"role": msg["role"], "content": msg["content"]})
 
-    # Sestavení poslední uživatelské zprávy (podle toho, zda obsahuje obrázek)
+    # Sestavení poslední uživatelské zprávy
     if image_base64:
+        # Oprava: Přidání formátovacího prefixu pro Base64, pokud chybí
+        if not image_base64.startswith("data:image/"):
+            image_url_formatted = f"data:image/jpeg;base64,{image_base64}"
+        else:
+            image_url_formatted = image_base64
+
         text_prompt = user_message if user_message else "Co je na tomto obrázku?"
         user_content = [
             {"type": "text", "text": text_prompt},
             {
                 "type": "image_url",
                 "image_url": {
-                    "url": image_base64
+                    "url": image_url_formatted
                 }
             }
         ]
@@ -132,7 +139,7 @@ def ask():
     else:
         messages.append({"role": "user", "content": user_message})
 
-    # Určení modelů k vyzkoušení (pokud je přítomen obrázek, použije se Vision model)
+    # Určení modelů k vyzkoušení
     models_to_run = [VISION_MODEL] if image_base64 else MODELS_TO_TRY
 
     def generate():
