@@ -71,7 +71,6 @@
       margin-bottom: 15px;
     }
     
-    /* HISTORIE - POLOŽKA S AKCEMI */
     .history-item {
       padding: 8px 10px;
       border-radius: 8px;
@@ -123,7 +122,6 @@
       background: rgba(255, 255, 255, 0.2);
     }
 
-    /* KONTEJNER PRO TLAČÍTKA DOLE V PANELU */
     .sidebar-bottom-actions {
       margin-top: auto;
       display: flex;
@@ -145,7 +143,6 @@
     }
     aside .sidebar-btn:hover { background: #c53030; }
 
-    /* TLAČÍTKO ODHLÁSIT SE */
     .logout-btn {
       width: 100%;
       background: #374151;
@@ -218,7 +215,6 @@
       display: none;
     }
 
-    /* OBAL PRO ZPRÁVU A TLAČÍTKA POD NÍ */
     .msg-group {
       display: flex;
       flex-direction: column;
@@ -233,7 +229,6 @@
       align-items: flex-start;
     }
 
-    /* BUBLINY */
     .q, .a {
       padding: 12px 18px;
       line-height: 1.5;
@@ -256,7 +251,14 @@
       box-shadow: 0 2px 6px rgba(0,0,0,0.03);
     }
 
-    /* TLAČÍTKA POD BUBLINOU */
+    .msg-img {
+      max-width: 100%;
+      max-height: 250px;
+      border-radius: 12px;
+      margin-bottom: 8px;
+      display: block;
+    }
+
     .action-bar {
       display: flex;
       gap: 6px;
@@ -290,7 +292,6 @@
       color: #0f172a;
     }
 
-    /* EDITACE ZPRÁVY */
     .edit-box {
       display: flex;
       flex-direction: column;
@@ -331,14 +332,12 @@
       cursor: pointer;
     }
 
-    /* Markdown styly */
     .a p { margin-top: 0; margin-bottom: 8px; }
     .a p:last-child { margin-bottom: 0; }
     .a ul, .a ol { margin: 8px 0; padding-left: 20px; }
     .a code { background: #f1f5f9; padding: 2px 5px; border-radius: 4px; font-family: monospace; font-size: 0.9em; }
     .a pre { background: #1e293b; color: #f8fafc; padding: 12px; border-radius: 8px; overflow-x: auto; margin: 8px 0; }
 
-    /* ANIMACE TŘÍ TEČEK PŘI PŘEMÝŠLENÍ */
     .typing-indicator {
       display: inline-flex;
       align-items: center;
@@ -390,6 +389,35 @@
       box-shadow: 0 4px 20px rgba(74, 144, 226, 0.2);
     }
 
+    /* PŘIDANÝ NÁHLED OBRÁZKU NAD INPUTEM */
+    .image-preview-container {
+      display: none;
+      position: relative;
+      width: fit-content;
+      margin-top: 4px;
+    }
+    .image-preview-container img {
+      max-height: 80px;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+    }
+    .remove-image-btn {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      background: #e53e3e;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 18px;
+      height: 18px;
+      font-size: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
     textarea {
       width: 100%;
       height: 48px;
@@ -408,6 +436,24 @@
       align-items: center;
       padding-top: 4px;
     }
+    .left-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .attach-btn {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 1.2rem;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      color: #64748b;
+      transition: color 0.2s;
+    }
+    .attach-btn:hover { color: #4a90e2; }
+
     .checkbox-label {
       font-size: 0.85rem;
       color: #64748b;
@@ -439,7 +485,6 @@
     <div class="history-title">Poslední</div>
     <div id="chat-history-list"></div>
 
-    <!-- Tlačítka dole v bočním panelu -->
     <div class="sidebar-bottom-actions">
       <a href="/logout" class="logout-btn">Odhlásit se</a>
       <button class="sidebar-btn" id="clear">Smazat historii</button>
@@ -457,11 +502,24 @@
 
     <form id="f">
       <div class="input-container">
+        <!-- Náhled vybraného obrázku -->
+        <div id="img-preview-box" class="image-preview-container">
+          <img id="img-preview" src="" alt="Náhled">
+          <button type="button" class="remove-image-btn" onclick="odstranitObrazek()">✕</button>
+        </div>
+
         <textarea id="q" placeholder="Zeptat se asistenta..."></textarea>
+        
         <div class="row">
-          <label class="checkbox-label">
-            <input type="checkbox" id="web"> Použít velký model (120B)
-          </label>
+          <div class="left-controls">
+            <!-- Tlačítko sponky pro obrázek -->
+            <button type="button" class="attach-btn" onclick="document.getElementById('file-input').click()" title="Připojit obrázek">📎</button>
+            <input type="file" id="file-input" accept="image/*" style="display: none;" onchange="nacticitObrazek(this)">
+
+            <label class="checkbox-label">
+              <input type="checkbox" id="web"> Použít velký model (120B)
+            </label>
+          </div>
           <button type="submit">Odeslat</button>
         </div>
       </div>
@@ -475,17 +533,45 @@
     
     let chats = JSON.parse(localStorage.getItem("ai_chats") || "[]");
     let currentChatId = null;
+    let selectedImageBase64 = null;
 
     function saveChats() {
       localStorage.setItem("ai_chats", JSON.stringify(chats));
     }
 
-    function addBubble(cls, text, index) {
+    function nacticitObrazek(input) {
+      const file = input.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        selectedImageBase64 = e.target.result;
+        document.getElementById("img-preview").src = selectedImageBase64;
+        document.getElementById("img-preview-box").style.display = "block";
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function odstranitObrazek() {
+      selectedImageBase64 = null;
+      document.getElementById("file-input").value = "";
+      document.getElementById("img-preview-box").style.display = "none";
+      document.getElementById("img-preview").src = "";
+    }
+
+    function addBubble(cls, text, index, imageBase64) {
       const group = document.createElement("div");
       group.className = `msg-group ${cls}-group`;
 
       const bubble = document.createElement("div");
       bubble.className = cls;
+
+      if (imageBase64) {
+        const img = document.createElement("img");
+        img.src = imageBase64;
+        img.className = "msg-img";
+        group.appendChild(img);
+      }
 
       if (cls === "q") {
         bubble.textContent = text;
@@ -510,7 +596,6 @@
       const actionBar = document.createElement("div");
       actionBar.className = "action-bar";
 
-      // Kopírovat
       const copyBtn = document.createElement("button");
       copyBtn.className = "action-btn";
       copyBtn.innerHTML = "📋 Kopírovat";
@@ -521,7 +606,6 @@
       };
       actionBar.appendChild(copyBtn);
 
-      // Upravit (u otázek uživatele)
       if (cls === "q") {
         const editBtn = document.createElement("button");
         editBtn.className = "action-btn";
@@ -530,7 +614,6 @@
         actionBar.appendChild(editBtn);
       }
 
-      // Znovu vygenerovat (u odpovědí AI)
       if (cls === "a") {
         const regenBtn = document.createElement("button");
         regenBtn.className = "action-btn";
@@ -547,10 +630,11 @@
       if (!chat || index < 1) return;
 
       const predchoziOtazka = chat.messages[index - 1].text;
+      const predchoziObrazek = chat.messages[index - 1].image;
       chat.messages = chat.messages.slice(0, index - 1);
       
       nacistChat(currentChatId);
-      poslatDotaz(predchoziOtazka);
+      poslatDotaz(predchoziOtazka, predchoziObrazek);
     }
 
     function zapnoutEditaci(group, bubble, staryText, index) {
@@ -700,7 +784,7 @@
         mainArea.classList.remove("empty-state");
         document.getElementById("chat-title").textContent = chat.title;
         chat.messages.forEach((m, idx) => {
-          addBubble(m.cls, m.text, idx);
+          addBubble(m.cls, m.text, idx, m.image);
         });
       } else {
         mainArea.classList.add("empty-state");
@@ -712,6 +796,7 @@
       currentChatId = null;
       log.innerHTML = "";
       document.getElementById("q").value = "";
+      odstranitObrazek();
       mainArea.classList.add("empty-state");
       renderSidebar();
     }
@@ -736,28 +821,32 @@
       }
     });
 
-    async function poslatDotaz(question) {
+    async function poslatDotaz(question, imgData = null) {
       let chat = chats.find(c => c.id === currentChatId);
       if (!chat) {
         currentChatId = Date.now();
-        chat = { id: currentChatId, title: question, messages: [] };
+        chat = { id: currentChatId, title: question || "Obrázek", messages: [] };
         chats.unshift(chat);
       }
 
       mainArea.classList.remove("empty-state");
 
       if (chat.messages.length === 0) {
-        chat.title = question;
-        document.getElementById("chat-title").textContent = question;
+        chat.title = question || "Obrázek";
+        document.getElementById("chat-title").textContent = chat.title;
       }
 
+      const imageToSend = imgData !== null ? imgData : selectedImageBase64;
       const qIndex = chat.messages.length;
-      chat.messages.push({ cls: "q", text: question });
-      addBubble("q", question, qIndex);
+      
+      chat.messages.push({ cls: "q", text: question, image: imageToSend });
+      addBubble("q", question, qIndex, imageToSend);
+      
       saveChats();
       renderSidebar();
 
       document.getElementById("q").value = "";
+      odstranitObrazek();
       
       const aIndex = chat.messages.length;
       const { group, bubble } = addBubble("a", "", aIndex);
@@ -772,6 +861,7 @@
           body: JSON.stringify({ 
             model: document.getElementById("web").checked ? "openai/gpt-oss-120b" : "openai/gpt-oss-20b",
             question: question,
+            image: imageToSend,
             history: chat.messages.slice(0, -1).map(m => ({
               role: m.cls === "q" ? "user" : "assistant",
               content: m.text
@@ -800,7 +890,6 @@
 
             let textPiece = "";
 
-            // Podpora standardního Server-Sent Events (data: ...)
             if (line.startsWith("data: ")) {
               const rawData = line.slice(6).trim();
               if (rawData === "[DONE]") break;
@@ -810,9 +899,7 @@
               } catch (e) {
                 textPiece = rawData.replace(/\\n/g, "\n");
               }
-            } 
-            // Podpora NDJSON (JSON na každý řádek)
-            else {
+            } else {
               try {
                 const data = JSON.parse(line);
                 textPiece = data.text || data.response || data.token || data.answer || "";
@@ -820,9 +907,7 @@
                   bubble.textContent = data.error;
                   return;
                 }
-              } catch (err) {
-                // Ignorovat neúplné řádky
-              }
+              } catch (err) {}
             }
 
             if (textPiece) {
@@ -849,7 +934,7 @@
     document.getElementById("f").onsubmit = (e) => {
       e.preventDefault();
       const question = document.getElementById("q").value.trim();
-      if (question) {
+      if (question || selectedImageBase64) {
         poslatDotaz(question);
       }
     };
