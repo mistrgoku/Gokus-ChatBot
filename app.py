@@ -13,10 +13,12 @@ client = Groq(api_key=api_key) if api_key else None
 # Jednoduché úložiště pro uživatele v paměti
 users = {}
 
-# Tvoje vybrané modely na Groq
+# Seznam modelů s podporovanými fallbacky (pokud jeden vrátí 404, zkusí další)
 MODELS_TO_TRY = [
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b"
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "llama3-70b-8192",
+    "llama3-8b-8192"
 ]
 
 # Model pro zpracování obrázků
@@ -80,8 +82,8 @@ def ask():
 
     if not client:
         return jsonify({
-            "answer": "Chyba: GROQ_API_KEY není nastaven v prostředí (Environment).",
-            "response": "Chyba: GROQ_API_KEY není nastaven v prostředí (Environment)."
+            "answer": "Chyba: GROQ_API_KEY není nastaven v prostředí (Environment Variables).",
+            "response": "Chyba: GROQ_API_KEY není nastaven v prostředí (Environment Variables)."
         }), 500
 
     data = request.get_json() or {}
@@ -95,7 +97,7 @@ def ask():
             "response": "Napiš prosím nějakou zprávu nebo přilož obrázek."
         }), 400
 
-    incoming_messages = data.get("messages", [])
+    incoming_messages = data.get("messages", []) or data.get("history", [])
     display_name = session.get("display_name", "Goku")
     user_email = session.get("user_email", "")
 
@@ -103,21 +105,18 @@ def ask():
     system_content = (
         f"Jsi Mistrův asistent, užitečný a přátelský AI asistent, kterého vytvořil člověk jménem Goku. "
         f"Uživatel, se kterým mluvíš, se jmenuje {display_name} a jeho e-mail je '{user_email}'. "
-        f"Automaticky detekuj zemi, národní doménu e-mailu uživatele (.cz, .sk, .de, .fr apod.) "
-        f"nebo jazyk jeho dotazu a ODPOVÍDEJ VŽDY V TOMTO DANÉM JAZYCE. "
-        f"Máš kompletní znalost všech 100+ světových jazyků. "
         f"Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, odpověz přesně touto větičkou: 'Vytvořil mě člověk jménem Goku.'"
     )
     
     messages = [{"role": "system", "content": system_content}]
 
     # Přidání historie
-    for msg in incoming_messages[:-1]:
+    for msg in incoming_messages:
         if isinstance(msg, dict) and "role" in msg and "content" in msg:
             if isinstance(msg["content"], str):
                 messages.append({"role": msg["role"], "content": msg["content"]})
 
-    # Příprava zprávy (s obrázkem nebo bez)
+    # Příprava aktuální zprávy
     if image_base64:
         if not image_base64.startswith("data:image/"):
             image_url_formatted = f"data:image/jpeg;base64,{image_base64}"
@@ -138,7 +137,6 @@ def ask():
     else:
         messages.append({"role": "user", "content": user_message})
 
-    # Pokud je přítomen obrázek, použije se vision model, jinak zkouší gpt-oss modely
     models_to_run = [VISION_MODEL] if image_base64 else MODELS_TO_TRY
 
     def generate():
@@ -157,7 +155,7 @@ def ask():
                         yield f"data: {json.dumps({'text': content})}\n\n"
                 return
             except Exception as e:
-                print(f"Model {model_name} selhal: {e}. Zkouším další...")
+                print(f"[GROQ ERROR] Model {model_name} selhal: {e}. Zkouším další model...")
                 continue
 
         yield f"data: {json.dumps({'text': 'Omlouvám se, všechny AI modely jsou momentálně nedostupné.'})}\n\n"
