@@ -13,15 +13,15 @@ client = Groq(api_key=api_key) if api_key else None
 # Jednoduché úložiště pro uživatele v paměti
 users = {}
 
-# Seznam stabilních textových modelů na Groq API
+# Seznam stabilních a aktuálně podporovaných textových modelů na Groq API
 MODELS_TO_TRY = [
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
     "mixtral-8x7b-32768"
 ]
 
-# Model pro zpracování obrázků
-VISION_MODEL = "llama-3.2-11b-vision-preview"
+# Aktuálně podporovaný Vision model na Groq API
+VISION_MODEL = "llama-3.2-11b-vision-instruct"
 
 @app.route("/")
 def home():
@@ -88,7 +88,7 @@ def ask():
     user_message = (data.get("question") or data.get("message") or data.get("text") or "").strip()
     image_base64 = data.get("image")
 
-    # Pokud je zpráva i obrázek prázdný, ihned vrátíme upozornění
+    # Kontrola prázdné zprávy i obrázku
     if not user_message and not image_base64:
         def empty_gen():
             yield f"data: {json.dumps({'text': 'Napsal jsi prázdnou zprávu. Zadej prosím text.'})}\n\n"
@@ -98,22 +98,22 @@ def ask():
     display_name = session.get("display_name", "Goku")
     user_email = session.get("user_email", "")
 
-    # Systémový prompt
+    # Systémový prompt s identitou
     system_content = (
-        f"Jsi Mistrův asistent, užitečný a přátelský AI asistent, kterého vytvořil člověk jménem Goku. "
-        f"Uživatel, se kterým mluvíš, se jmoveje {display_name} a jeho e-mail je '{user_email}'. "
+        f"Jsi Mistrův asistent, užitečný a přátelský AI asistent, kterého vytvořil člověk jnímim Goku. "
+        f"Uživatel, se kterým mluvíš, se jmenuje {display_name} a jeho e-mail je '{user_email}'. "
         f"Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, odpověz přesně touto větičkou: 'Vytvořil mě člověk jménem Goku.'"
     )
     
     messages = [{"role": "system", "content": system_content}]
 
-    # Přidání historie
+    # Přidání historie konverzace pro udržení kontextu
     for msg in incoming_messages:
         if isinstance(msg, dict) and "role" in msg and "content" in msg:
             if isinstance(msg["content"], str) and msg["content"].strip():
                 messages.append({"role": msg["role"], "content": msg["content"]})
 
-    # Příprava aktuální zprávy
+    # Příprava zprávy s obrázkem nebo pouze s textem
     if image_base64:
         if not image_base64.startswith("data:image/"):
             image_url_formatted = f"data:image/jpeg;base64,{image_base64}"
@@ -134,6 +134,7 @@ def ask():
     else:
         messages.append({"role": "user", "content": user_message})
 
+    # Volba modelu podle toho, zda se posílá obrázek
     models_to_run = [VISION_MODEL] if image_base64 else MODELS_TO_TRY
 
     def generate():
