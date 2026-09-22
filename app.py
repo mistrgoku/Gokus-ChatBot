@@ -13,19 +13,14 @@ client = Groq(api_key=api_key) if api_key else None
 # Jednoduché úložiště pro uživatele v paměti
 users = {}
 
-# Tvoje fungující modely pro běžný text
+# Tvoje vybrané modely na Groq
 MODELS_TO_TRY = [
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b"
 ]
 
-# Modely pro zpracování obrázků (Vision)
-VISION_MODELS = [
-    "llama-3.2-11b-vision-preview",
-    "llama-3.2-90b-vision-preview",
-    "qwen/qwen3.8-27b",
-    "meta-llama/llama-4-scout-17b-16e-instruct"
-]
+# Model pro zpracování obrázků
+VISION_MODEL = "llama-3.2-11b-vision-preview"
 
 @app.route("/")
 def home():
@@ -92,7 +87,7 @@ def ask():
     data = request.get_json() or {}
     user_message = data.get("question") or data.get("message") or data.get("text") or ""
     user_message = user_message.strip()
-    image_base64 = data.get("image")  # Přečteme přiložený obrázek v Base64
+    image_base64 = data.get("image")
 
     if not user_message and not image_base64:
         return jsonify({
@@ -104,9 +99,9 @@ def ask():
     display_name = session.get("display_name", "Goku")
     user_email = session.get("user_email", "")
 
-    # Systémové instrukce
+    # Systémový prompt
     system_content = (
-        f"Jsi Mistrův asistent, užitečný a přátelský AI asistent, kterým tě vytvořil člověk jménem Goku. "
+        f"Jsi Mistrův asistent, užitečný a přátelský AI asistent, kterého vytvořil člověk jménem Goku. "
         f"Uživatel, se kterým mluvíš, se jmenuje {display_name} a jeho e-mail je '{user_email}'. "
         f"Automaticky detekuj zemi, národní doménu e-mailu uživatele (.cz, .sk, .de, .fr apod.) "
         f"nebo jazyk jeho dotazu a ODPOVÍDEJ VŽDY V TOMTO DANÉM JAZYCE. "
@@ -116,15 +111,14 @@ def ask():
     
     messages = [{"role": "system", "content": system_content}]
 
-    # Přidání historie konverzace (pouze čistý text pro zachování funkčnosti)
+    # Přidání historie
     for msg in incoming_messages[:-1]:
         if isinstance(msg, dict) and "role" in msg and "content" in msg:
             if isinstance(msg["content"], str):
                 messages.append({"role": msg["role"], "content": msg["content"]})
 
-    # Sestavení aktuální uživatelské zprávy
+    # Příprava zprávy (s obrázkem nebo bez)
     if image_base64:
-        # Přidání správného prefixu pro Base64
         if not image_base64.startswith("data:image/"):
             image_url_formatted = f"data:image/jpeg;base64,{image_base64}"
         else:
@@ -144,8 +138,8 @@ def ask():
     else:
         messages.append({"role": "user", "content": user_message})
 
-    # Výběr seznamu modelů podle vstupu
-    models_to_run = VISION_MODELS if image_base64 else MODELS_TO_TRY
+    # Pokud je přítomen obrázek, použije se vision model, jinak zkouší gpt-oss modely
+    models_to_run = [VISION_MODEL] if image_base64 else MODELS_TO_TRY
 
     def generate():
         for model_name in models_to_run:
