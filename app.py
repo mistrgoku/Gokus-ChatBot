@@ -13,15 +13,20 @@ client = Groq(api_key=api_key) if api_key else None
 # Jednoduché úložiště pro uživatele v paměti
 users = {}
 
-# Seznam stabilních a aktuálně podporovaných textových modelů na Groq API
+# Seznam nejnovějších, oficiálně podporovaných textových modelů na Groq API
 MODELS_TO_TRY = [
     "llama-3.3-70b-versatile",
     "llama-3.1-8b-instant",
+    "llama3-70b-8192",
+    "llama3-8b-8192",
     "mixtral-8x7b-32768"
 ]
 
-# Aktuálně podporovaný Vision model na Groq API
-VISION_MODEL = "llama-3.2-11b-vision-instruct"
+# Pokusný Vision model (pokud by ho Groq zrovna podporoval)
+VISION_MODELS = [
+    "llama-3.2-11b-vision-instruct",
+    "llama-3.2-90b-vision-instruct"
+]
 
 @app.route("/")
 def home():
@@ -88,7 +93,6 @@ def ask():
     user_message = (data.get("question") or data.get("message") or data.get("text") or "").strip()
     image_base64 = data.get("image")
 
-    # Kontrola prázdné zprávy i obrázku
     if not user_message and not image_base64:
         def empty_gen():
             yield f"data: {json.dumps({'text': 'Napsal jsi prázdnou zprávu. Zadej prosím text.'})}\n\n"
@@ -98,51 +102,65 @@ def ask():
     display_name = session.get("display_name", "Goku")
     user_email = session.get("user_email", "")
 
-    # Systémový prompt s identitou
     system_content = (
-        f"Jsi Mistrův asistent, užitečný a přátelský AI asistent, kterého vytvořil člověk jnímim Goku. "
+        f"Jsi Mistrův asistent, užitečný a přátelský AI asistent, kterého vytvořil člověk jménem Goku. "
         f"Uživatel, se kterým mluvíš, se jmenuje {display_name} a jeho e-mail je '{user_email}'. "
-        f"Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, odpověz přesně touto větičkou: 'Vytvořil mě člověk jménem Goku.'"
+        f"Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, odpověz přesně touto větou: 'Vytvořil mě člověk jménem Goku.'"
     )
     
-    messages = [{"role": "system", "content": system_content}]
-
-    # Přidání historie konverzace pro udržení kontextu
+    # Sestavení zpráv pro textové modely
+    text_messages = [{"role": "system", "content": system_content}]
     for msg in incoming_messages:
         if isinstance(msg, dict) and "role" in msg and "content" in msg:
             if isinstance(msg["content"], str) and msg["content"].strip():
-                messages.append({"role": msg["role"], "content": msg["content"]})
+                text_messages.append({"role": msg["role"], "content": msg["content"]})
+    text_messages.append({"role": "user", "content": user_message if user_message else "Ahoj!"})
 
-    # Příprava zprávy s obrázkem nebo pouze s textem
+    # Sestavení zpráv pro vision modely (pokud je přítomen obrázek)
+    vision_messages = None
     if image_base64:
-        if not image_base64.startswith("data:image/"):
-            image_url_formatted = f"data:image/jpeg;base64,{image_base64}"
-        else:
-            image_url_formatted = image_base64
-
+        image_url_formatted = image_base64 if image_base64.startswith("data:image/") else f"data:image/jpeg;base64,{image_base64}"
         text_prompt = user_message if user_message else "Co je na tomto obrázku?"
+        
+        vision_messages = [{"role": "system", "content": system_content}]
+        for msg in incoming_messages:
+            if isinstance(msg, dict) and "role" in msg and "content" in msg:
+                if isinstance(msg["content"], str) and msg["content"].strip():
+                    vision_messages.append({"role": msg["role"], "content": msg["content"]})
+        
         user_content = [
             {"type": "text", "text": text_prompt},
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": image_url_formatted
-                }
-            }
+            {"type": "image_url", "image_url": {"url": image_url_formatted}}
         ]
-        messages.append({"role": "user", "content": user_content})
-    else:
-        messages.append({"role": "user", "content": user_message})
-
-    # Volba modelu podle toho, zda se posílá obrázek
-    models_to_run = [VISION_MODEL] if image_base64 else MODELS_TO_TRY
+        vision_messages.append({"role": "user", "content": user_content})
 
     def generate():
-        for model_name in models_to_run:
+        # 1. Pokud je přítomen obrázek, nejprve zkusíme Vision modely
+        if vision_messages:
+            for v_model in VISION_MODELS:
+                try:
+                    completion = client.chat.completions.create(
+                        messages=vision_messages,
+                        model=v_model,
+                        temperature=0.7,
+                        max_tokens=1024,
+                        stream=True
+                    )
+                    for chunk in completion:
+                        content = chunk.choices[0].delta.content or ""
+                        if content:
+                            yield f"data: {json.dumps({'text': content})}\n\n"
+                    return
+                except Exception as e:
+                    print(f"[GROQ VISION ERROR] Model {v_model} selhal: {e}. Přecházím na textové modely...")
+                    continue
+
+        # 2. Běžné textové dotazy (nebo záložní plán, pokud vision selže)
+        for t_model in MODELS_TO_TRY:
             try:
                 completion = client.chat.completions.create(
-                    messages=messages,
-                    model=model_name,
+                    messages=text_messages,
+                    model=t_model,
                     temperature=0.7,
                     max_tokens=1024,
                     stream=True
@@ -153,7 +171,7 @@ def ask():
                         yield f"data: {json.dumps({'text': content})}\n\n"
                 return
             except Exception as e:
-                print(f"[GROQ ERROR] Model {model_name} selhal: {e}")
+                print(f"[GROQ TEXT ERROR] Model {t_model} selhal: {e}")
                 continue
 
         yield f"data: {json.dumps({'text': 'Omlouvám se, všechny AI modely jsou momentálně nedostupné.'})}\n\n"
