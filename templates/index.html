@@ -564,7 +564,7 @@
       document.getElementById("img-preview").src = "";
     }
 
-    /* PŘIDANÁ PODPORA PRO CTRL + V (VLOŽENÍ OBRÁZKU ZE SCHRÁNKY) */
+    /* PODPORA PRO CTRL + V (VLOŽENÍ OBRÁZKU ZE SCHRÁNKY) */
     window.addEventListener("paste", function(e) {
       const items = (e.clipboardData || e.originalEvent.clipboardData).items;
       for (let index in items) {
@@ -576,7 +576,7 @@
             nastavitObrazek(event.target.result);
           };
           reader.readAsDataURL(blob);
-          e.preventDefault(); // zabrání vložení textových dat z obr. kódu
+          e.preventDefault();
           break;
         }
       }
@@ -882,6 +882,7 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
+            // Zde jsou původní názvy modelů, které tvůj server očekává
             model: document.getElementById("web").checked ? "openai/gpt-oss-120b" : "openai/gpt-oss-20b",
             question: question,
             image: imageToSend,
