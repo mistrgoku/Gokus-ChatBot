@@ -9,9 +9,10 @@ app.secret_key = os.environ.get("SECRET_KEY", "tajny-klic-goku-secure")
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
+# Ukládání uživatelů v paměti
 users = {}
 
-# Přesné modely dostupné na tvém účtu
+# Funkční modely dostupné na tvém účtu
 MODELS_TO_TRY = [
     "qwen/qwen3.8-27b",
     "openai/gpt-oss-120b",
@@ -20,6 +21,7 @@ MODELS_TO_TRY = [
 
 @app.route("/")
 def home():
+    # Pokud není přihlášen, pošleme ho na LOGIN
     if "user_email" not in session:
         return redirect(url_for("login"))
     display_name = session.get("display_name", "Goku")
@@ -32,12 +34,13 @@ def login():
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "").strip()
         
+        # PŘIHLÁŠENÍ: Ověříme, že účet existuje a heslo odpovídá
         if email in users and users[email]["password"] == password:
             session["user_email"] = email
             session["display_name"] = users[email]["display_name"]
             return redirect(url_for("home"))
         else:
-            error = "Nesprávný e-mail nebo heslo."
+            error = "Nesprávný e-mail nebo heslo. Pokud ještě nemáš účet, zaregistruj se."
             
     return render_template("login.html", error=error)
 
@@ -49,15 +52,18 @@ def register():
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "").strip()
         
+        # REGISTRACE: Vytvoříme nový účet
         if not display_name or not email or not password:
-            error = "Vyplňte prosím všechna pole."
+            error = "Vyplň prosím všechna pole."
         elif email in users:
-            error = "Tento e-mail je již zaregistrovaný."
+            error = "Tento e-mail už je zaregistrovaný. Můžeš se rovno přihlásit."
         else:
+            # Uložení uživatele
             users[email] = {
                 "display_name": display_name,
                 "password": password
             }
+            # Po registraci rovnou přihlásíme a pošleme na hlavní stránku
             session["user_email"] = email
             session["display_name"] = display_name
             return redirect(url_for("home"))
@@ -111,7 +117,7 @@ def ask():
                     messages=text_messages,
                     model=model_name,
                     temperature=0.7,
-                    max_tokens=500,  # Omezeno kvůli OTPM limitu zdarma
+                    max_tokens=300,  # Sníženo pro splnění limitu OTPM
                     stream=True
                 )
                 for chunk in completion:
