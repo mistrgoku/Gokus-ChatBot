@@ -13,19 +13,48 @@ client = Groq(api_key=api_key) if api_key else None
 # Úložiště uživatelů v paměti
 users = {}
 
-# Funkční textové modely přímo z oficiální tabulky Groq
-TEXT_MODELS = [
+# Preferované pořadí modelů (od nejlepšího/nejchytřejšího po záložní)
+PREFERRED_TEXT_MODELS = [
     "llama-3.3-70b-versatile",
-    "llama-3.1-8b-instant",
     "openai/gpt-oss-120b",
+    "qwen/qwen3.8-27b",
+    "llama-3.1-8b-instant",
     "openai/gpt-oss-20b"
 ]
 
-# Pokusné vision modely
-VISION_MODELS = [
+PREFERRED_VISION_MODELS = [
     "llama-3.2-11b-vision-instruct",
-    "meta-llama/llama-4-scout-17b-16e-instruct"
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "qwen/qwen3.8-27b"
 ]
+
+def get_best_models(is_vision=False):
+    """
+    Automaticky ověří dostupné modely přes Groq API 
+    a vrátí seřazený seznam nejlepších dostupných modelů.
+    """
+    if not client:
+        return []
+    
+    try:
+        # Získáme seznam všech aktuálně dostupných modelů pro náš API klíč
+        available_response = client.models.list()
+        available_ids = [m.id for m in available_response.data]
+    except Exception as e:
+        print(f"[AUTO-ROUTER ERROR] Získání modelů selhalo: {e}")
+        # V případě výpadku vrátíme výchozí preferovaný seznam
+        return PREFERRED_VISION_MODELS if is_vision else PREFERRED_TEXT_MODELS
+
+    target_preferences = PREFERRED_VISION_MODELS if is_vision else PREFERRED_TEXT_MODELS
+    
+    # Vybereme pouze ty modely, které jsou na účtu reálně dostupné
+    active_models = [m_id for m_id in target_preferences if m_id in available_ids]
+    
+    # Pokud žádný z preferovaných nenašel shodu, použijeme jakýkoliv dostupný z účtu
+    if not active_models and available_ids:
+        active_models = available_ids
+
+    return active_models
 
 @app.route("/")
 def home():
@@ -102,22 +131,17 @@ def ask():
     user_email = session.get("user_email", "")
 
     system_content = (
-        f"Jsi Mistrův asistent, užitečný a přátelský AI asistent, kterého vytvořil člověk jnímim Goku. "
+        f"Jsi Mistrův asistent, užitečný a přátelský AI asistent, kterého vytvořil člověk jménem Goku. "
         f"Uživatel, se kterým mluvíš, se jmenuje {display_name} a jeho e-mail je '{user_email}'. "
         f"Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, odpověz přesně touto větičkou: 'Vytvořil mě člověk jnímim Goku.'"
     )
 
-    formatted_text_messages = [{"role": "system", "content": system_content}]
-    for msg in incoming_messages:
-        if isinstance(msg, dict) and "role" in msg and "content" in msg:
-            if isinstance(msg["content"], str) and msg["content"].strip():
-                formatted_text_messages.append({"role": msg["role"], "content": msg["content"]})
-
-    formatted_text_messages.append({"role": "user", "content": user_message if user_message else "Ahoj!"})
-
     def generate():
-        # Pokud uživatel poslal obrázek, zkus nejprve Vision modely
+        # --- ROZHODOVÁNÍ: MÁME OBRÁZEK? ---
         if image_base64:
+            # Získáme automaticky nejlepší dostupné VISION modely
+            vision_models = get_best_models(is_vision=True)
+            
             if not image_base64.startswith("data:image/"):
                 image_url_formatted = f"data:image/jpeg;base64,{image_base64}"
             else:
@@ -139,13 +163,13 @@ def ask():
                 ]
             })
 
-            for v_model in VISION_MODELS:
+            for v_model in vision_models:
                 try:
                     completion = client.chat.completions.create(
                         messages=vision_payload,
                         model=v_model,
                         temperature=0.7,
-                        max_tokens=1024,
+                        max_tokens=500,
                         stream=True
                     )
                     for chunk in completion:
@@ -154,17 +178,27 @@ def ask():
                             yield f"data: {json.dumps({'text': content})}\n\n"
                     return
                 except Exception as e:
-                    print(f"[VISION ERROR] Model {v_model} selhal: {e}. Zkouším další...")
+                    print(f"[AUTO-ROUTER] Vision model {v_model} neusměl: {e}. Zkouším další...")
                     continue
 
-        # Standardní textový dotaz (nebo náhradní řešení, pokud vision selže)
-        for t_model in TEXT_MODELS:
+        # --- TEXT DO TADY: POUŽIJEME NEJLEPŠÍ TEXTOVÝ MODEL ---
+        text_models = get_best_models(is_vision=False)
+        formatted_text_messages = [{"role": "system", "content": system_content}]
+        
+        for msg in incoming_messages:
+            if isinstance(msg, dict) and "role" in msg and "content" in msg:
+                if isinstance(msg["content"], str) and msg["content"].strip():
+                    formatted_text_messages.append({"role": msg["role"], "content": msg["content"]})
+
+        formatted_text_messages.append({"role": "user", "content": user_message if user_message else "Ahoj!"})
+
+        for t_model in text_models:
             try:
                 completion = client.chat.completions.create(
                     messages=formatted_text_messages,
                     model=t_model,
                     temperature=0.7,
-                    max_tokens=1024,
+                    max_tokens=500,
                     stream=True
                 )
                 for chunk in completion:
@@ -173,7 +207,7 @@ def ask():
                         yield f"data: {json.dumps({'text': content})}\n\n"
                 return
             except Exception as e:
-                print(f"[TEXT ERROR] Model {t_model} selhal: {e}")
+                print(f"[AUTO-ROUTER] Text model {t_model} neusměl: {e}")
                 continue
 
         yield f"data: {json.dumps({'text': 'Omlouvám se, žádný AI model se nepodařilo kontaktovat.'})}\n\n"
