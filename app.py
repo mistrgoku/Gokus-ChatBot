@@ -6,22 +6,34 @@ from groq import Groq
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "tajny-klic-goku-secure")
 
+# Načtení API klíče z prostředí na Renderu
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
 # Ukládání uživatelů v paměti
 users = {}
 
-# Funkční modely dostupné na tvém účtu
-MODELS_TO_TRY = [
-    "qwen/qwen3.8-27b",
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b"
-]
+def get_available_models():
+    """Automaticky načte všechny aktuálně dostupné chatovací modely přímo z tvého Groq účtu."""
+    if not client:
+        return []
+    try:
+        models_page = client.models.list()
+        # Vyfiltrujeme pouze textové/chatovací modely (vynecháme audio a guard modely)
+        valid_models = [
+            m.id for m in models_page.data 
+            if "whisper" not in m.id and "safeguard" not in m.id and "guard" not in m.id
+        ]
+        if valid_models:
+            return valid_models
+    except Exception as e:
+        print(f"[GROQ ERROR] Zjišťování seznamu modelů selhalo: {e}")
+    
+    # Záložní seznam pro případ, že by načítání ze serveru na moment vypadlo
+    return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
 
 @app.route("/")
 def home():
-    # Pokud není přihlášen, pošleme ho na LOGIN
     if "user_email" not in session:
         return redirect(url_for("login"))
     display_name = session.get("display_name", "Goku")
@@ -34,7 +46,6 @@ def login():
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "").strip()
         
-        # PŘIHLÁŠENÍ: Ověříme, že účet existuje a heslo odpovídá
         if email in users and users[email]["password"] == password:
             session["user_email"] = email
             session["display_name"] = users[email]["display_name"]
@@ -52,18 +63,15 @@ def register():
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "").strip()
         
-        # REGISTRACE: Vytvoříme nový účet
         if not display_name or not email or not password:
             error = "Vyplň prosím všechna pole."
         elif email in users:
             error = "Tento e-mail už je zaregistrovaný. Můžeš se rovno přihlásit."
         else:
-            # Uložení uživatele
             users[email] = {
                 "display_name": display_name,
                 "password": password
             }
-            # Po registraci rovnou přihlásíme a pošleme na hlavní stránku
             session["user_email"] = email
             session["display_name"] = display_name
             return redirect(url_for("home"))
@@ -108,28 +116,36 @@ def ask():
         if isinstance(msg, dict) and "role" in msg and "content" in msg:
             if isinstance(msg["content"], str) and msg["content"].strip():
                 text_messages.append({"role": msg["role"], "content": msg["content"]})
-    text_messages.append({"role": "user", "content": user_message})
+    
+    if not text_messages or text_messages[-1].get("content") != user_message:
+        text_messages.append({"role": "user", "content": user_message})
+
+    # Získání živého seznamu funkčních modelů z účtu
+    models_to_try = get_available_models()
 
     def generate():
-        for model_name in MODELS_TO_TRY:
+        last_error = ""
+        for model_name in models_to_try:
             try:
                 completion = client.chat.completions.create(
                     messages=text_messages,
                     model=model_name,
                     temperature=0.7,
-                    max_tokens=300,  # Sníženo pro splnění limitu OTPM
+                    max_tokens=300,
                     stream=True
                 )
                 for chunk in completion:
                     content = chunk.choices[0].delta.content or ""
                     if content:
                         yield f"data: {json.dumps({'text': content})}\n\n"
-                return
+                return  # Jakmile model úspěšně pošle odpověď, ukončíme funkci
             except Exception as e:
+                last_error = str(e)
                 print(f"[GROQ ERROR] Model {model_name} selhal: {e}")
                 continue
 
-        yield f"data: {json.dumps({'text': 'Omlouvám se, všechny AI modely jsou momentálně nedostupné.'})}\n\n"
+        # Pokud selžou všechny dostupné modely, vypíše se přesný důvod selhání
+        yield f"data: {json.dumps({'text': f'Chyba API: Nepodařilo se připojit k žádnému modelu. Detail: {last_error}'})}\n\n"
 
     return Response(stream_with_context(generate()), content_type="text/event-stream")
 
