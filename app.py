@@ -13,28 +13,36 @@ client = Groq(api_key=api_key) if api_key else None
 # Úložiště pro uživatele v paměti
 users = {}
 
-# Vision modely pro zpracování obrázků
-VISION_MODELS = [
-    "llama-3.2-11b-vision-preview",
-    "llama-3.2-90b-vision-preview"
-]
-
-def get_available_text_models():
-    """Načte všechny dostupné textové modely z tvého účtu."""
+def get_groq_models(need_vision=False):
+    """Automaticky načte aktuálně podporované modely z tvého Groq účtu."""
     if not client:
         return []
     try:
         models_page = client.models.list()
+        all_models = [m.id for m in models_page.data]
+        
+        # Filtrování vyřazených a nevhodných modelů
         valid_models = [
-            m.id for m in models_page.data 
-            if "whisper" not in m.id and "safeguard" not in m.id and "guard" not in m.id and "vision" not in m.id
+            m for m in all_models 
+            if "whisper" not in m and "safeguard" not in m and "guard" not in m
         ]
-        if valid_models:
-            return valid_models
+
+        if need_vision:
+            # Vybereme pouze aktivní modely podporující Vision
+            vision_models = [m for m in valid_models if "vision" in m]
+            if vision_models:
+                return vision_models
+            return ["llama-3.2-11b-vision-preview"] # Záložní možnost
+        else:
+            # Vybereme pouze textové modely
+            text_models = [m for m in valid_models if "vision" not in m]
+            if text_models:
+                return text_models
+            return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"] # Záložní možnost
+
     except Exception as e:
-        print(f"[GROQ ERROR] Načítání textových modelů selhalo: {e}")
-    
-    return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
+        print(f"[GROQ ERROR] Načítání modelů selhalo: {e}")
+        return ["llama-3.2-11b-vision-preview"] if need_vision else ["llama-3.3-70b-versatile"]
 
 @app.route("/")
 def home():
@@ -119,17 +127,16 @@ def ask():
 
     formatted_messages = [{"role": "system", "content": system_content}]
 
-    # Zpracování historie
+    # Zpracování historie konverzace
     for msg in incoming_messages:
         if isinstance(msg, dict) and "role" in msg and "content" in msg:
             if isinstance(msg["content"], str) and msg["content"].strip():
                 formatted_messages.append({"role": msg["role"], "content": msg["content"]})
 
-    # Pokud uživatel posílá obrázek
+    # Pokud požadavek obsahuje obrázek
     if image_base64:
-        models_to_try = VISION_MODELS
+        models_to_try = get_groq_models(need_vision=True)
         
-        # Ošetření předpony data URI
         if not image_base64.startswith("data:image/"):
             image_url_formatted = f"data:image/jpeg;base64,{image_base64}"
         else:
@@ -145,8 +152,8 @@ def ask():
         ]
         formatted_messages.append({"role": "user", "content": user_content})
     else:
-        # Čistě textový dotaz
-        models_to_try = get_available_text_models()
+        # Pouze textový požadavek
+        models_to_try = get_groq_models(need_vision=False)
         if not formatted_messages or formatted_messages[-1].get("content") != user_message:
             formatted_messages.append({"role": "user", "content": user_message})
 
