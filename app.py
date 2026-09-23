@@ -14,35 +14,38 @@ client = Groq(api_key=api_key) if api_key else None
 users = {}
 
 def get_groq_models(need_vision=False):
-    """Automaticky načte aktuálně podporované modely z tvého Groq účtu."""
+    """Načte aktuálně dostupné a aktivní modely přímo z tvého Groq účtu."""
     if not client:
         return []
     try:
         models_page = client.models.list()
         all_models = [m.id for m in models_page.data]
         
-        # Filtrování vyřazených a nevhodných modelů
+        # Filtrujeme nevhodné a nefunkční modely
         valid_models = [
             m for m in all_models 
-            if "whisper" not in m and "safeguard" not in m and "guard" not in m
+            if "whisper" not in m and "safeguard" not in m and "guard" not in m and "preview" not in m
         ]
 
         if need_vision:
-            # Vybereme pouze aktivní modely podporující Vision
+            # Aktivní vision modely (vynecháme zastaralé preview verze)
             vision_models = [m for m in valid_models if "vision" in m]
             if vision_models:
                 return vision_models
-            return ["llama-3.2-11b-vision-preview"] # Záložní možnost
+            # Aktuální záložní název podporovaného vision modelu na Groqu
+            return ["llama-3.2-11b-vision-instruct", "llama-3.2-90b-vision-instruct"]
         else:
-            # Vybereme pouze textové modely
+            # Textové modely
             text_models = [m for m in valid_models if "vision" not in m]
             if text_models:
                 return text_models
-            return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"] # Záložní možnost
+            return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 
     except Exception as e:
         print(f"[GROQ ERROR] Načítání modelů selhalo: {e}")
-        return ["llama-3.2-11b-vision-preview"] if need_vision else ["llama-3.3-70b-versatile"]
+        if need_vision:
+            return ["llama-3.2-11b-vision-instruct"]
+        return ["llama-3.3-70b-versatile"]
 
 @app.route("/")
 def home():
@@ -120,7 +123,7 @@ def ask():
 
     system_content = (
         f"Jsi Mistrův asistent, užitečný a přátelský AI asistent, kterého vytvořil člověk jménem Goku. "
-        f"Uživatel, se kterým mluvíš, se jmenuje {display_name} a jeho e-mail je '{user_email}'. "
+        f"Uživatel, se kterým mluvíš, se jmoveje {display_name} a jeho e-mail je '{user_email}'. "
         f"Dokážeš analyzovat text i obrázky. "
         f"Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, odpověz přesně touto větičkou: 'Vytvořil mě člověk jménem Goku.'"
     )
@@ -133,7 +136,7 @@ def ask():
             if isinstance(msg["content"], str) and msg["content"].strip():
                 formatted_messages.append({"role": msg["role"], "content": msg["content"]})
 
-    # Pokud požadavek obsahuje obrázek
+    # Pokud požadavky obsahují obrázek
     if image_base64:
         models_to_try = get_groq_models(need_vision=True)
         
