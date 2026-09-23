@@ -10,42 +10,22 @@ app.secret_key = os.environ.get("SECRET_KEY", "tajny-klic-goku-secure")
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
-# Úložiště pro uživatele v paměti
+# Úložiště uživatelů v paměti
 users = {}
 
-def get_groq_models(need_vision=False):
-    """Načte aktuálně dostupné a aktivní modely přímo z tvého Groq účtu."""
-    if not client:
-        return []
-    try:
-        models_page = client.models.list()
-        all_models = [m.id for m in models_page.data]
-        
-        # Filtrujeme nevhodné a nefunkční modely
-        valid_models = [
-            m for m in all_models 
-            if "whisper" not in m and "safeguard" not in m and "guard" not in m and "preview" not in m
-        ]
+# Funkční textové modely přímo z oficiální tabulky Groq
+TEXT_MODELS = [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b"
+]
 
-        if need_vision:
-            # Aktivní vision modely (vynecháme zastaralé preview verze)
-            vision_models = [m for m in valid_models if "vision" in m]
-            if vision_models:
-                return vision_models
-            # Aktuální záložní název podporovaného vision modelu na Groqu
-            return ["llama-3.2-11b-vision-instruct", "llama-3.2-90b-vision-instruct"]
-        else:
-            # Textové modely
-            text_models = [m for m in valid_models if "vision" not in m]
-            if text_models:
-                return text_models
-            return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
-
-    except Exception as e:
-        print(f"[GROQ ERROR] Načítání modelů selhalo: {e}")
-        if need_vision:
-            return ["llama-3.2-11b-vision-instruct"]
-        return ["llama-3.3-70b-versatile"]
+# Pokusné vision modely
+VISION_MODELS = [
+    "llama-3.2-11b-vision-instruct",
+    "meta-llama/llama-4-scout-17b-16e-instruct"
+]
 
 @app.route("/")
 def home():
@@ -122,53 +102,69 @@ def ask():
     user_email = session.get("user_email", "")
 
     system_content = (
-        f"Jsi Mistrův asistent, užitečný a přátelský AI asistent, kterého vytvořil člověk jménem Goku. "
-        f"Uživatel, se kterým mluvíš, se jmoveje {display_name} a jeho e-mail je '{user_email}'. "
-        f"Dokážeš analyzovat text i obrázky. "
-        f"Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, odpověz přesně touto větičkou: 'Vytvořil mě člověk jménem Goku.'"
+        f"Jsi Mistrův asistent, užitečný a přátelský AI asistent, kterého vytvořil člověk jnímim Goku. "
+        f"Uživatel, se kterým mluvíš, se jmenuje {display_name} a jeho e-mail je '{user_email}'. "
+        f"Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, odpověz přesně touto větičkou: 'Vytvořil mě člověk jnímim Goku.'"
     )
 
-    formatted_messages = [{"role": "system", "content": system_content}]
-
-    # Zpracování historie konverzace
+    formatted_text_messages = [{"role": "system", "content": system_content}]
     for msg in incoming_messages:
         if isinstance(msg, dict) and "role" in msg and "content" in msg:
             if isinstance(msg["content"], str) and msg["content"].strip():
-                formatted_messages.append({"role": msg["role"], "content": msg["content"]})
+                formatted_text_messages.append({"role": msg["role"], "content": msg["content"]})
 
-    # Pokud požadavky obsahují obrázek
-    if image_base64:
-        models_to_try = get_groq_models(need_vision=True)
-        
-        if not image_base64.startswith("data:image/"):
-            image_url_formatted = f"data:image/jpeg;base64,{image_base64}"
-        else:
-            image_url_formatted = image_base64
-
-        prompt_text = user_message if user_message else "Co se nachází na tomto obrázku?"
-        user_content = [
-            {"type": "text", "text": prompt_text},
-            {
-                "type": "image_url",
-                "image_url": {"url": image_url_formatted}
-            }
-        ]
-        formatted_messages.append({"role": "user", "content": user_content})
-    else:
-        # Pouze textový požadavek
-        models_to_try = get_groq_models(need_vision=False)
-        if not formatted_messages or formatted_messages[-1].get("content") != user_message:
-            formatted_messages.append({"role": "user", "content": user_message})
+    formatted_text_messages.append({"role": "user", "content": user_message if user_message else "Ahoj!"})
 
     def generate():
-        last_error = ""
-        for model_name in models_to_try:
+        # Pokud uživatel poslal obrázek, zkus nejprve Vision modely
+        if image_base64:
+            if not image_base64.startswith("data:image/"):
+                image_url_formatted = f"data:image/jpeg;base64,{image_base64}"
+            else:
+                image_url_formatted = image_base64
+
+            prompt_text = user_message if user_message else "Co se nachází na tomto obrázku?"
+            vision_payload = [{"role": "system", "content": system_content}]
+            
+            for msg in incoming_messages:
+                if isinstance(msg, dict) and "role" in msg and "content" in msg:
+                    if isinstance(msg["content"], str) and msg["content"].strip():
+                        vision_payload.append({"role": msg["role"], "content": msg["content"]})
+
+            vision_payload.append({
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt_text},
+                    {"type": "image_url", "image_url": {"url": image_url_formatted}}
+                ]
+            })
+
+            for v_model in VISION_MODELS:
+                try:
+                    completion = client.chat.completions.create(
+                        messages=vision_payload,
+                        model=v_model,
+                        temperature=0.7,
+                        max_tokens=1024,
+                        stream=True
+                    )
+                    for chunk in completion:
+                        content = chunk.choices[0].delta.content or ""
+                        if content:
+                            yield f"data: {json.dumps({'text': content})}\n\n"
+                    return
+                except Exception as e:
+                    print(f"[VISION ERROR] Model {v_model} selhal: {e}. Zkouším další...")
+                    continue
+
+        # Standardní textový dotaz (nebo náhradní řešení, pokud vision selže)
+        for t_model in TEXT_MODELS:
             try:
                 completion = client.chat.completions.create(
-                    messages=formatted_messages,
-                    model=model_name,
+                    messages=formatted_text_messages,
+                    model=t_model,
                     temperature=0.7,
-                    max_tokens=500,
+                    max_tokens=1024,
                     stream=True
                 )
                 for chunk in completion:
@@ -177,11 +173,10 @@ def ask():
                         yield f"data: {json.dumps({'text': content})}\n\n"
                 return
             except Exception as e:
-                last_error = str(e)
-                print(f"[GROQ ERROR] Model {model_name} selhal: {e}")
+                print(f"[TEXT ERROR] Model {t_model} selhal: {e}")
                 continue
 
-        yield f"data: {json.dumps({'text': f'Chyba při zpracování: {last_error}'})}\n\n"
+        yield f"data: {json.dumps({'text': 'Omlouvám se, žádný AI model se nepodařilo kontaktovat.'})}\n\n"
 
     return Response(stream_with_context(generate()), content_type="text/event-stream")
 
