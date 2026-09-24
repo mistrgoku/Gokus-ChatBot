@@ -1,5 +1,7 @@
 import os
 import json
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from flask import Flask, render_template, request, jsonify, Response, stream_with_context, redirect, url_for, session
 from groq import Groq
 
@@ -10,21 +12,38 @@ app.secret_key = os.environ.get("SECRET_KEY", "tajny-klic-goku-secure")
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
-# Trvalé úložiště uživatelů v JSON souboru (aby se nesmazali po restartu Renderu)
-USERS_FILE = "users.json"
+# Připojení k PostgreSQL databázi z prostředí Renderu
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-def load_users():
-    if os.path.exists(USERS_FILE):
+def get_db_connection():
+    if not DATABASE_URL:
+        return None
+    return psycopg2.connect(DATABASE_URL)
+
+def init_db():
+    """Vytvoří tabulku 'users' v databázi, pokud ještě neexistuje."""
+    if DATABASE_URL:
         try:
-            with open(USERS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
-    return {}
+            conn = get_db_connection()
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    display_name VARCHAR(100) NOT NULL,
+                    email VARCHAR(120) UNIQUE NOT NULL,
+                    password VARCHAR(200) NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            conn.commit()
+            cur.close()
+            conn.close()
+            print("[DATABASE] Tabulka 'users' byla úspěšně zkontrolována/inicializována.")
+        except Exception as e:
+            print(f"[DATABASE ERROR] Chyba při inicializaci databáze: {e}")
 
-def save_users(users):
-    with open(USERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(users, f, ensure_ascii=False, indent=4)
+# Inicializace databáze při spuštění aplikace
+init_db()
 
 # Preferované pořadí modelů (od nejlepšího/nejchytřejšího po záložní)
 PREFERRED_TEXT_MODELS = [
@@ -79,14 +98,25 @@ def login():
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "").strip()
         
-        users = load_users()
-        
-        if email in users and users[email]["password"] == password:
-            session["user_email"] = email
-            session["display_name"] = users[email]["display_name"]
-            return redirect(url_for("home"))
+        conn = get_db_connection()
+        if conn:
+            try:
+                cur = conn.cursor(cursor_factory=RealDictCursor)
+                cur.execute("SELECT * FROM users WHERE email = %s AND password = %s", (email, password))
+                user = cur.fetchone()
+                cur.close()
+                conn.close()
+
+                if user:
+                    session["user_email"] = user["email"]
+                    session["display_name"] = user["display_name"]
+                    return redirect(url_for("home"))
+                else:
+                    error = "Nesprávný e-mail nebo heslo."
+            except Exception as e:
+                error = f"Chyba při přihlašování: {e}"
         else:
-            error = "Nesprávný e-mail nebo heslo."
+            error = "Databáze není připojena (chybí DATABASE_URL)."
             
     return render_template("login.html", error=error)
 
@@ -98,21 +128,30 @@ def register():
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "").strip()
         
-        users = load_users()
-        
         if not display_name or not email or not password:
             error = "Vyplňte prosím všechna pole."
-        elif email in users:
-            error = "Tento e-mail je již zaregistrovaný."
         else:
-            users[email] = {
-                "display_name": display_name,
-                "password": password
-            }
-            save_users(users)
-            session["user_email"] = email
-            session["display_name"] = display_name
-            return redirect(url_for("home"))
+            conn = get_db_connection()
+            if conn:
+                try:
+                    cur = conn.cursor()
+                    cur.execute(
+                        "INSERT INTO users (display_name, email, password) VALUES (%s, %s, %s)",
+                        (display_name, email, password)
+                    )
+                    conn.commit()
+                    cur.close()
+                    conn.close()
+
+                    session["user_email"] = email
+                    session["display_name"] = display_name
+                    return redirect(url_for("home"))
+                except psycopg2.IntegrityError:
+                    error = "Tento e-mail je již zaregistrovaný."
+                except Exception as e:
+                    error = f"Chyba databáze: {e}"
+            else:
+                error = "Databáze není připojena (chybí DATABASE_URL)."
             
     return render_template("register.html", error=error)
 
