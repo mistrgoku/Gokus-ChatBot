@@ -10,8 +10,21 @@ app.secret_key = os.environ.get("SECRET_KEY", "tajny-klic-goku-secure")
 api_key = os.environ.get("GROQ_API_KEY")
 client = Groq(api_key=api_key) if api_key else None
 
-# Úložiště uživatelů v paměti
-users = {}
+# Trvalé úložiště uživatelů v JSON souboru (aby se nesmazali po restartu Renderu)
+USERS_FILE = "users.json"
+
+def load_users():
+    if os.path.exists(USERS_FILE):
+        try:
+            with open(USERS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_users(users):
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(users, f, ensure_ascii=False, indent=4)
 
 # Preferované pořadí modelů (od nejlepšího/nejchytřejšího po záložní)
 PREFERRED_TEXT_MODELS = [
@@ -37,20 +50,16 @@ def get_best_models(is_vision=False):
         return []
     
     try:
-        # Získáme seznam všech aktuálně dostupných modelů pro náš API klíč
         available_response = client.models.list()
         available_ids = [m.id for m in available_response.data]
     except Exception as e:
         print(f"[AUTO-ROUTER ERROR] Získání modelů selhalo: {e}")
-        # V případě výpadku vrátíme výchozí preferovaný seznam
         return PREFERRED_VISION_MODELS if is_vision else PREFERRED_TEXT_MODELS
 
     target_preferences = PREFERRED_VISION_MODELS if is_vision else PREFERRED_TEXT_MODELS
     
-    # Vybereme pouze ty modely, které jsou na účtu reálně dostupné
     active_models = [m_id for m_id in target_preferences if m_id in available_ids]
     
-    # Pokud žádný z preferovaných nenašel shodu, použijeme jakýkoliv dostupný z účtu
     if not active_models and available_ids:
         active_models = available_ids
 
@@ -67,8 +76,10 @@ def home():
 def login():
     error = None
     if request.method == "POST":
-        email = request.form.get("email", "").strip()
+        email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "").strip()
+        
+        users = load_users()
         
         if email in users and users[email]["password"] == password:
             session["user_email"] = email
@@ -84,8 +95,10 @@ def register():
     error = None
     if request.method == "POST":
         display_name = request.form.get("display_name", "").strip()
-        email = request.form.get("email", "").strip()
+        email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "").strip()
+        
+        users = load_users()
         
         if not display_name or not email or not password:
             error = "Vyplňte prosím všechna pole."
@@ -96,6 +109,7 @@ def register():
                 "display_name": display_name,
                 "password": password
             }
+            save_users(users)
             session["user_email"] = email
             session["display_name"] = display_name
             return redirect(url_for("home"))
@@ -133,13 +147,12 @@ def ask():
     system_content = (
         f"Jsi Mistrův asistent, užitečný a přátelský AI asistent, kterého vytvořil člověk jménem Goku. "
         f"Uživatel, se kterým mluvíš, se jmenuje {display_name} a jeho e-mail je '{user_email}'. "
-        f"Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, odpověz přesně touto větičkou: 'Vytvořil mě člověk jnímim Goku.'"
+        f"Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, odpověz přesně touto větičkou: 'Vytvořil mě člověk jménem Goku.'"
     )
 
     def generate():
         # --- ROZHODOVÁNÍ: MÁME OBRÁZEK? ---
         if image_base64:
-            # Získáme automaticky nejlepší dostupné VISION modely
             vision_models = get_best_models(is_vision=True)
             
             if not image_base64.startswith("data:image/"):
