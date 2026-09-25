@@ -38,7 +38,7 @@ def login():
                 user = cur.fetchone()
 
                 if user:
-                    # ÚČET EXISTUJE -> Ověříme heslo (podporuje i stará nezahešovaná hesla)
+                    # ÚČET EXISTUJE -> Ověříme heslo
                     stored_pw = user["password"]
                     is_valid = False
                     
@@ -56,7 +56,7 @@ def login():
                     else:
                         error = "Nesprávné heslo."
                 else:
-                    # ÚČET NEEXISTUJE -> Automaticky ho vytvoříme (Registrace)
+                    # ÚČET NEEXISTUJE -> Automatická registrace
                     name_to_save = display_name if display_name else email.split("@")[0]
                     hashed_pw = generate_password_hash(password)
 
@@ -87,7 +87,9 @@ def login():
 def home():
     if "user_email" not in session:
         return redirect(url_for("login"))
-    return f"Vítej v chatu, {session.get('display_name')}!"
+    
+    # OPRAVA: Místo čistého textu načteme HTML šablonu index.html
+    return render_template("index.html", user_name=session.get("display_name"))
 
 @app.route("/logout")
 def logout():
