@@ -1,73 +1,83 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Přihlášení - Mistrův asistent</title>
-  <style>
-    * { box-sizing: border-box; }
-    body {
-      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-      margin: 0; padding: 0;
-      background: radial-gradient(circle at center, #ffffff 0%, #edf2f7 100%);
-      color: #1f1f1f;
-      display: flex; justify-content: center; align-items: center;
-      min-height: 100vh;
-    }
-    .card {
-      background: #ffffff;
-      padding: 40px;
-      border-radius: 16px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-      width: 100%; max-width: 400px;
-      border: 1px solid #e2e8f0;
-    }
-    h2 { margin-top: 0; color: #4a90e2; text-align: center; margin-bottom: 24px; }
-    .error {
-      background: #fed7d7; color: #c53030; padding: 10px;
-      border-radius: 8px; font-size: 0.9rem; margin-bottom: 16px; text-align: center;
-    }
-    .form-group { margin-bottom: 16px; display: flex; flex-direction: column; gap: 6px; }
-    label { font-size: 0.9rem; font-weight: 600; color: #4a5568; }
-    input {
-      padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px;
-      font-size: 1rem; outline: none; transition: border-color 0.2s;
-    }
-    input:focus { border-color: #4a90e2; box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15); }
-    button {
-      width: 100%; padding: 12px; background: #4a90e2; color: white;
-      border: none; border-radius: 8px; font-weight: bold; font-size: 1rem;
-      cursor: pointer; transition: background 0.2s; margin-top: 8px;
-    }
-    button:hover { background: #357abd; }
-    .link { text-align: center; margin-top: 16px; font-size: 0.9rem; color: #64748b; }
-    .link a { color: #4a90e2; text-decoration: none; font-weight: 600; }
-    .link a:hover { text-decoration: underline; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vstup do aplikace</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            background: #121212; 
+            color: #ffffff; 
+            margin: 0; 
+        }
+        .box { 
+            background: #1e1e1e; 
+            padding: 30px; 
+            border-radius: 12px; 
+            width: 100%; 
+            max-width: 340px; 
+            text-align: center; 
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+        h2 { margin-top: 0; margin-bottom: 20px; color: #fff; }
+        input { 
+            width: 100%; 
+            padding: 12px; 
+            margin: 8px 0; 
+            border-radius: 6px; 
+            border: 1px solid #333; 
+            background: #2a2a2a; 
+            color: white; 
+            font-size: 14px;
+            outline: none;
+        }
+        input:focus { border-color: #007bff; }
+        button { 
+            width: 100%; 
+            padding: 12px; 
+            background: #007bff; 
+            border: none; 
+            color: white; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            margin-top: 14px; 
+            font-weight: bold; 
+            font-size: 15px;
+            transition: background 0.2s;
+        }
+        button:hover { background: #0056b3; }
+        .error { 
+            background: rgba(255, 85, 85, 0.1); 
+            color: #ff5555; 
+            padding: 10px; 
+            border-radius: 6px; 
+            margin-bottom: 12px; 
+            font-size: 13px; 
+            border: 1px solid rgba(255, 85, 85, 0.3);
+        }
+        p.subtitle { color: #888; font-size: 13px; margin-bottom: 20px; }
+    </style>
 </head>
 <body>
-  <main class="card">
-    <h2>Přihlášení</h2>
-    
-    {% if error %}
-      <div class="error">{{ error }}</div>
-    {% endif %}
-
-    <form action="{{ url_for('login') }}" method="POST">
-      <div class="form-group">
-        <label for="email">E-mail</label>
-        <input type="email" id="email" name="email" required placeholder="tvuj@email.cz" autocomplete="email">
-      </div>
-      <div class="form-group">
-        <label for="password">Heslo</label>
-        <input type="password" id="password" name="password" required placeholder="••••••••" autocomplete="current-password">
-      </div>
-      <button type="submit">Přihlásit se</button>
-    </form>
-
-    <div class="link">
-      Nemáš ještě účet? <a href="{{ url_for('register') }}">Zaregistruj se</a>
+    <div class="box">
+        <h2>Vstup / Přihlášení</h2>
+        <p class="subtitle">Zadej své jméno a heslo pro vstup</p>
+        
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+        
+        <form method="POST" action="/login">
+            <input type="text" name="display_name" placeholder="Tvoje Jméno / Nick" required>
+            <input type="password" name="password" placeholder="Heslo" required>
+            <button type="submit">Vstoupit</button>
+        </form>
     </div>
-  </main>
 </body>
 </html>
