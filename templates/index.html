@@ -389,7 +389,6 @@
       box-shadow: 0 4px 20px rgba(74, 144, 226, 0.2);
     }
 
-    /* NÁHLED OBRÁZKU NAD INPUTEM */
     .image-preview-container {
       display: none;
       position: relative;
@@ -486,7 +485,7 @@
     <div id="chat-history-list"></div>
 
     <div class="sidebar-bottom-actions">
-      <a href="/logout" class="logout-btn">Odhlásit se</a>
+      <a href="{{ url_for('logout') }}" class="logout-btn">Odhlásit se</a>
       <button class="sidebar-btn" id="clear">Smazat historii</button>
     </div>
   </aside>
@@ -502,7 +501,6 @@
 
     <form id="f">
       <div class="input-container">
-        <!-- Náhled vybraného obrázku -->
         <div id="img-preview-box" class="image-preview-container">
           <img id="img-preview" src="" alt="Náhled">
           <button type="button" class="remove-image-btn" onclick="odstranitObrazek()">✕</button>
@@ -512,7 +510,6 @@
         
         <div class="row">
           <div class="left-controls">
-            <!-- Tlačítko sponky pro obrázek -->
             <button type="button" class="attach-btn" onclick="document.getElementById('file-input').click()" title="Připojit obrázek">📎</button>
             <input type="file" id="file-input" accept="image/*" style="display: none;" onchange="nacticitObrazek(this)">
 
@@ -564,7 +561,6 @@
       document.getElementById("img-preview").src = "";
     }
 
-    /* PODPORA PRO CTRL + V (VLOŽENÍ OBRÁZKU ZE SCHRÁNKY) */
     window.addEventListener("paste", function(e) {
       const items = (e.clipboardData || e.originalEvent.clipboardData).items;
       for (let index in items) {
@@ -882,7 +878,6 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
-            // Zde jsou původní názvy modelů, které tvůj server očekává
             model: document.getElementById("web").checked ? "openai/gpt-oss-120b" : "openai/gpt-oss-20b",
             question: question,
             image: imageToSend,
