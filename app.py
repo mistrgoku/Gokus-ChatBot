@@ -58,14 +58,28 @@ def login():
 
         user = User.query.filter_by(email=email).first()
 
-        if user and check_password_hash(user.password_hash, password):
-            session["user_id"] = user.id
-            session["user_email"] = user.email
-            session["display_name"] = user.display_name
+        if user:
+            # 1. Zkontroluje, zda heslo odpovídá šifrovanému tvaru (hash)
+            # 2. Nebo zda odpovídá přesně v čistém textu (pro staré nešifrované účty)
+            is_valid_hash = False
+            try:
+                is_valid_hash = check_password_hash(user.password_hash, password)
+            except Exception:
+                is_valid_hash = False
 
-            if request.is_json:
-                return jsonify({"status": "success", "redirect": "/"})
-            return redirect(url_for("home"))
+            if is_valid_hash or user.password_hash == password:
+                # Pokud se přihlásil starým nešifrovaným heslem, rovnou ho zašifruje pro příště
+                if not is_valid_hash:
+                    user.password_hash = generate_password_hash(password)
+                    db.session.commit()
+
+                session["user_id"] = user.id
+                session["user_email"] = user.email
+                session["display_name"] = user.display_name
+
+                if request.is_json:
+                    return jsonify({"status": "success", "redirect": "/"})
+                return redirect(url_for("home"))
 
         error_msg = "Nesprávný e-mail nebo heslo."
         if request.is_json:
@@ -90,7 +104,7 @@ def register():
 
         user = User.query.filter_by(email=email).first()
 
-        # Pokud uživatel existuje, aktualizuje se mu heslo a přihlásí se
+        # Pokud uživatel existuje, aktualizuje se mu heslo na správný hash
         if user:
             user.password_hash = generate_password_hash(password)
             user.display_name = display_name or user.display_name
