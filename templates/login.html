@@ -1,93 +1,142 @@
-<!DOCTYPE html>
-<html lang="cs">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vstup do aplikace</title>
-    <style>
-        * { box-sizing: border-box; }
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            height: 100vh; 
-            background: #121212; 
-            color: #ffffff; 
-            margin: 0; 
-        }
-        .box { 
-            background: #1e1e1e; 
-            padding: 45px 40px; 
-            border-radius: 16px; 
-            width: 100%; 
-            max-width: 460px; 
-            text-align: center; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
-        }
-        h2 { 
-            margin-top: 0; 
-            margin-bottom: 12px; 
-            color: #fff; 
-            font-size: 28px; 
-        }
-        p.subtitle { 
-            color: #aaa; 
-            font-size: 16px; 
-            margin-bottom: 28px; 
-        }
-        input { 
-            width: 100%; 
-            padding: 16px; 
-            margin: 10px 0; 
-            border-radius: 10px; 
-            border: 1px solid #333; 
-            background: #2a2a2a; 
-            color: white; 
-            font-size: 17px;
-            outline: none;
-        }
-        input:focus { border-color: #007bff; }
-        button { 
-            width: 100%; 
-            padding: 16px; 
-            background: #007bff; 
-            border: none; 
-            color: white; 
-            border-radius: 10px; 
-            cursor: pointer; 
-            margin-top: 18px; 
-            font-weight: bold; 
-            font-size: 18px;
-            transition: background 0.2s;
-        }
-        button:hover { background: #0056b3; }
-        .error { 
-            background: rgba(255, 85, 85, 0.1); 
-            color: #ff5555; 
-            padding: 14px; 
-            border-radius: 8px; 
-            margin-bottom: 16px; 
-            font-size: 15px; 
-            border: 1px solid rgba(255, 85, 85, 0.3);
-        }
-    </style>
-</head>
-<body>
-    <div class="box">
-        <h2>Vstup / Přihlášení</h2>
-        <p class="subtitle">Zadej své jméno, e-mail a heslo pro vstup</p>
+import os
+import json
+from flask import Flask, render_template, request, jsonify, Response, stream_with_context, redirect, url_for, session
+from groq import Groq
+
+app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "tajny-klic-goku-secure")
+
+api_key = os.environ.get("GROQ_API_KEY")
+client = Groq(api_key=api_key) if api_key else None
+
+# Jednoduchá databáze v paměti (pro trvalé ukládání využijeme přidanou PostgreSQL)
+users = {}
+
+# Aktualizované a dostupné modely na Groqu
+MODELS_TO_TRY = [
+    "qwen/qwen3.8-27b",
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b"
+]
+
+@app.route("/")
+def home():
+    if "user_email" not in session:
+        return redirect(url_for("login"))
+    display_name = session.get("display_name", "Uživatel")
+    return render_template("index.html", display_name=display_name)
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    error = None
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "").strip()
         
-        {% if error %}
-            <div class="error">{{ error }}</div>
-        {% endif %}
+        # Kontrola v paměti (pokud uživatel existuje)
+        if email in users and users[email]["password"] == password:
+            session["user_email"] = email
+            session["display_name"] = users[email]["display_name"]
+            return redirect(url_for("home"))
+        elif email not in users:
+            error = "Účet s tímto e-mailem neexistuje. Nejprve se zaregistruj."
+        else:
+            error = "Nesprávné heslo."
+            
+    return render_template("login.html", error=error)
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    error = None
+    if request.method == "POST":
+        display_name = request.form.get("display_name", "").strip()
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "").strip()
         
-        <form method="POST" action="/login">
-            <input type="text" name="display_name" placeholder="Tvoje Jméno / Nick" required>
-            <input type="email" name="email" placeholder="Tůj E-mail" required>
-            <input type="password" name="password" placeholder="Heslo" required>
-            <button type="submit">Vstoupit</button>
-        </form>
-    </div>
-</body>
-</html>
+        if not display_name or not email or not password:
+            error = "Vyplň prosím všechna pole."
+        elif email in users:
+            error = "Tento e-mail je již zaregistrovaný. Přihlas se."
+        else:
+            # Uložení nového účtu
+            users[email] = {
+                "display_name": display_name,
+                "password": password
+            }
+            session["user_email"] = email
+            session["display_name"] = display_name
+            return redirect(url_for("home"))
+            
+    return render_template("register.html", error=error)
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+@app.route("/ask", methods=["POST"])
+def ask():
+    if "user_email" not in session:
+        return jsonify({"answer": "Nejste přihlášen."}), 401
+
+    if not client:
+        def no_key_gen():
+            yield f"data: {json.dumps({'text': 'Chyba: GROQ_API_KEY není nastaven v Environment Variables.'})}\n\n"
+        return Response(stream_with_context(no_key_gen()), content_type="text/event-stream")
+
+    data = request.get_json() or {}
+    user_message = (data.get("question") or data.get("message") or data.get("text") or "").strip()
+
+    if not user_message:
+        def empty_gen():
+            yield f"data: {json.dumps({'text': 'Napsal jsi prázdnou zprávu. Zadej prosím text.'})}\n\n"
+        return Response(stream_with_context(empty_gen()), content_type="text/event-stream")
+
+    incoming_messages = data.get("messages", []) or data.get("history", [])
+    display_name = session.get("display_name", "Uživatel")
+    user_email = session.get("user_email", "")
+
+    # Systémový prompt s předáním informací o přihlášeném uživateli
+    system_content = (
+        f"Jsi Mistrův asistent, užitečný a přátelský AI asistent, kterého vytvořil člověk jménem Goku. "
+        f"Uživatel, se kterým mluvíš, se jmoveuje {display_name} a jeho e-mail je '{user_email}'. "
+        f"Pokud se tě kdokoliv zeptá, kdo tě vytvořil nebo naprogramoval, odpověz přesně touto větou: 'Vytvořil mě člověk jménem Goku.'"
+    )
+
+    text_messages = [{"role": "system", "content": system_content}]
+    for msg in incoming_messages:
+        if isinstance(msg, dict) and "role" in msg and "content" in msg:
+            if isinstance(msg["content"], str) and msg["content"].strip():
+                text_messages.append({"role": msg["role"], "content": msg["content"]})
+    text_messages.append({"role": "user", "content": user_message})
+
+    def generate():
+        for model_name in MODELS_TO_TRY:
+            try:
+                completion = client.chat.completions.create(
+                    messages=text_messages,
+                    model=model_name,
+                    temperature=0.7,
+                    max_tokens=300,  # Snížený limit, aby nepadal na rate limit (OTPM)
+                    stream=True
+                )
+                for chunk in completion:
+                    content = chunk.choices[0].delta.content or ""
+                    if content:
+                        yield f"data: {json.dumps({'text': content})}\n\n"
+                return
+            except Exception as e:
+                print(f"[GROQ ERROR] Model {model_name} selhal: {e}")
+                continue
+
+        yield f"data: {json.dumps({'text': 'Omlouvám se, všechny AI modely jsou momentálně nedostupné.'})}\n\n"
+
+    return Response(stream_with_context(generate()), content_type="text/event-stream")
+
+@app.route("/clear", methods=["POST"])
+def clear():
+    return jsonify({"status": "ok"}), 200
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
