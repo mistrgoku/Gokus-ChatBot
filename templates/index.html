@@ -701,7 +701,6 @@
         let chat = chats.find(c => c.id === currentChatId);
         if (!chat) return;
 
-        // Vytáhneme původní obrázek, aby při úpravě textu nezmizel
         const puvodniObrazek = chat.messages[index] ? chat.messages[index].image : null;
 
         chat.messages = chat.messages.slice(0, index);
@@ -900,13 +899,15 @@
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let fullAnswer = "";
+        let buffer = "";
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n");
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop(); // Ponecháme neúplný řádek v bufferu pro další cyklus
 
           for (let line of lines) {
             line = line.trim();
@@ -919,7 +920,7 @@
               if (rawData === "[DONE]") break;
               try {
                 const parsed = JSON.parse(rawData);
-                textPiece = parsed.text || parsed.response || parsed.token || parsed.answer || "";
+                textPiece = parsed.text || parsed.response || parsed.token || parsed.answer || (parsed.choices && parsed.choices[0] && parsed.choices[0].delta ? parsed.choices[0].delta.content : "") || "";
               } catch (e) {
                 textPiece = rawData.replace(/\\n/g, "\n");
               }
@@ -946,6 +947,27 @@
           }
         }
 
+        // Zpracování zbylého textu v bufferu po dokončení načítání
+        if (buffer.trim()) {
+          let line = buffer.trim();
+          let textPiece = "";
+          if (line.startsWith("data: ")) {
+            const rawData = line.slice(6).trim();
+            if (rawData !== "[DONE]") {
+              try {
+                const parsed = JSON.parse(rawData);
+                textPiece = parsed.text || parsed.response || parsed.token || parsed.answer || (parsed.choices && parsed.choices[0] && parsed.choices[0].delta ? parsed.choices[0].delta.content : "") || "";
+              } catch (e) {
+                textPiece = rawData.replace(/\\n/g, "\n");
+              }
+            }
+          }
+          if (textPiece) {
+            fullAnswer += textPiece;
+          }
+        }
+
+        bubble.innerHTML = typeof marked !== "undefined" ? marked.parse(fullAnswer) : fullAnswer;
         pridatAkcePodBublinu(group, bubble, "a", fullAnswer, aIndex);
         chat.messages.push({ cls: "a", text: fullAnswer });
         saveChats();
