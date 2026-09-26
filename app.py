@@ -222,7 +222,7 @@ def ask():
                         messages=vision_payload,
                         model=v_model,
                         temperature=0.7,
-                        max_tokens=500,
+                        max_tokens=850,
                         stream=True
                     )
                     for chunk in completion:
