@@ -701,9 +701,12 @@
         let chat = chats.find(c => c.id === currentChatId);
         if (!chat) return;
 
+        // Vytáhneme původní obrázek, aby při úpravě textu nezmizel
+        const puvodniObrazek = chat.messages[index] ? chat.messages[index].image : null;
+
         chat.messages = chat.messages.slice(0, index);
         nacistChat(currentChatId);
-        poslatDotaz(novyText);
+        poslatDotaz(novyText, puvodniObrazek);
       };
     }
 
@@ -865,7 +868,9 @@
       renderSidebar();
 
       textArea.value = "";
-      odstranitObrazek();
+      if (imgData === null) {
+        odstranitObrazek();
+      }
       
       const aIndex = chat.messages.length;
       const { group, bubble } = addBubble("a", "", aIndex);
